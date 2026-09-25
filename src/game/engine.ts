@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { BoardRow, Difficulty, HudSnap, InputState, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
+import { LEVEL_DEFS, MAP, waterRects, type LevelDef, type Rect } from "./levels";
+import { characterById } from "./types";
+import type { BoardRow, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
 
-const MAP = { minX: -30, minZ: -38, w: 60, d: 76 };
 const GW = 120;
 const GH = 152;
 const TW = 480;
@@ -12,18 +13,6 @@ const MATCH_LEN = Number(import.meta.env.VITE_MATCH_LEN) || 180;
 const GRAV = 22;
 const STEP = 1 / 60;
 
-const SPAWN_O: [number, number][] = [
-  [-20, -28],
-  [-4, -31],
-  [4, -30],
-  [8, -27],
-];
-const SPAWN_V: [number, number][] = [
-  [20, 23],
-  [-4, 31],
-  [4, 30],
-  [-8, 28],
-];
 
 type Team = 1 | 2;
 
@@ -46,6 +35,7 @@ type Kid = {
   weapons: Record<WeaponId, THREE.Group>;
   nameSprite: THREE.Sprite;
   nameCanvas: HTMLCanvasElement;
+  char: CharacterId;
 };
 
 type Actor = {
@@ -86,6 +76,8 @@ type Actor = {
   painted: number;
   rush: number;
   stuck: number;
+  char: CharacterId;
+  mods: CharacterMods;
   mesh: Kid;
 };
 
@@ -120,6 +112,7 @@ export type EngineApi = {
   resume: () => void;
   orbit: () => void;
   showcase: () => void;
+  setLevel: (id: LevelId) => void;
 };
 
 type Bridge = {
@@ -315,7 +308,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     `,
   });
 
-  const geos: THREE.BufferGeometry[] = [];
   function colorize(geo: THREE.BufferGeometry, hex: number) {
     const c = new THREE.Color(hex);
     const n = geo.getAttribute("position").count;
@@ -328,125 +320,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     geo.setAttribute("color", new THREE.BufferAttribute(arr, 3));
     return geo;
   }
-  function pushBox(cx: number, cy: number, cz: number, w: number, h: number, d: number, color: number, solid = true) {
-    const g = new THREE.BoxGeometry(w, h, d);
-    colorize(g, color);
-    g.applyMatrix4(new THREE.Matrix4().makeTranslation(cx, cy, cz));
-    geos.push(g);
-    if (solid) {
-      solids.push({
-        minX: cx - w / 2,
-        maxX: cx + w / 2,
-        minY: cy - h / 2,
-        maxY: cy + h / 2,
-        minZ: cz - d / 2,
-        maxZ: cz + d / 2,
-      });
-    }
-  }
-  function pushStairs(x: number, zEdge: number, dir: number, width: number, totalH: number, run: number, steps: number, color: number) {
-    const sd = run / steps;
-    for (let i = 0; i < steps; i++) {
-      const h = (totalH * (steps - i)) / steps;
-      const zc = zEdge + dir * (sd * i + sd / 2);
-      pushBox(x, h / 2, zc, width, h, Math.max(0.2, sd - 0.06), color, true);
-    }
-  }
-
-  const ground = new THREE.PlaneGeometry(MAP.w, MAP.d);
-  ground.rotateX(-Math.PI / 2);
-  colorize(ground, 0xf0d2ae);
-  ground.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, 0));
-  geos.push(ground);
-
-  pushBox(0, 2.1, -39.2, 64, 4.2, 1.3, 0xf6ecdf, true);
-  pushBox(0, 2.1, 39.2, 64, 4.2, 1.3, 0xf6ecdf, true);
-  pushBox(-31.2, 2.1, 0, 1.3, 4.2, 80, 0xf6ecdf, true);
-  pushBox(31.2, 2.1, 0, 1.3, 4.2, 80, 0xf6ecdf, true);
-
-  pushBox(-20, 1.15, -27, 14, 2.3, 14, 0xffd7b4, true);
-  pushStairs(-20, -20, 1, 10, 2.3, 6.6, 4, 0xe7d3c0);
-  pushBox(20.5, 2.1, -25.5, 13, 4.2, 15, 0xffe3c8, true);
-  pushBox(20.5, 4.28, -25.5, 13.4, 0.28, 15.4, 0xff6a1a, true);
-
-  pushBox(0, 1.25, 0, 10, 2.5, 12, 0xc9d7e8, true);
-  pushBox(0, 2.72, 0, 10.4, 0.28, 12.3, 0xeef3f8, true);
-  pushStairs(0, -6, -1, 10, 2.5, 6.4, 4, 0xd5deea);
-  pushStairs(0, 6, 1, 10, 2.5, 6.4, 4, 0xd5deea);
-  pushBox(-18, 0.31, 0, 8, 0.62, 10, 0xd7a15e, true);
-  pushBox(18, 0.31, 0, 8, 0.62, 10, 0xd7a15e, true);
-
-  pushBox(20, 0.7, 23, 14, 1.4, 14, 0xd9e6ff, true);
-  pushStairs(20, 16, -1, 10, 1.4, 5.6, 3, 0xc9d8ee);
-  pushBox(-20.5, 2, 25.5, 13, 4, 15, 0xd5e4ff, true);
-  pushBox(-20.5, 4.1, 25.5, 13.4, 0.26, 15.4, 0x5b4dff, true);
-
-  const crates: [number, number, number, number, number][] = [
-    [0, -15, 1.5, 1.05, 1.5],
-    [-8, -12, 1.7, 1.15, 1.2],
-    [7, -13, 1.2, 0.85, 1.9],
-    [3, -9, 1.6, 0.7, 1.1],
-    [-2, 13, 1.6, 1.05, 1.6],
-    [9, 11, 1.3, 1.2, 1.3],
-    [-11, 15, 2.2, 0.9, 1.2],
-    [-7, 9, 1.1, 0.75, 1.7],
-    [16, -10, 1.5, 1.05, 1.4],
-    [-16, 10, 1.3, 1.0, 2.1],
-    [11, 18, 1.4, 0.8, 1.4],
-    [-2, -18, 1.2, 0.9, 1.2],
-  ];
-  crates.forEach((c, i) => {
-    const h = c[3];
-    pushBox(c[0], h / 2, c[1], c[2], h, c[4], i % 2 === 0 ? 0xe0a15a : 0x7ec8e3, true);
-  });
-
-  pushBox(-9.2, 0.38, 0.4, 2.4, 0.36, 1.1, 0xf2f5f8, false);
-  pushBox(9.4, 0.42, -0.6, 2.6, 0.4, 1.15, 0xfff1df, false);
-
-  function pushPalm(x: number, z: number) {
-    const h = 3.5;
-    const trunk = new THREE.CylinderGeometry(0.1, 0.2, h, 6);
-    colorize(trunk, 0x8d5a32);
-    trunk.applyMatrix4(new THREE.Matrix4().makeTranslation(x, h / 2, z));
-    geos.push(trunk);
-    for (let i = 0; i < 6; i++) {
-      const leaf = new THREE.BoxGeometry(0.22, 0.06, 1.45);
-      colorize(leaf, i % 2 === 0 ? 0x2fae55 : 0x46c86a);
-      const ang = (i / 6) * Math.PI * 2;
-      const m = new THREE.Matrix4().makeRotationX(1.05);
-      m.premultiply(new THREE.Matrix4().makeRotationY(ang));
-      m.setPosition(x + Math.sin(ang) * 0.45, h - 0.05, z + Math.cos(ang) * 0.45);
-      leaf.applyMatrix4(m);
-      geos.push(leaf);
-    }
-  }
-  [
-    [-28.4, -12],
-    [-28.2, 8],
-    [28.4, -14],
-    [28.2, 6],
-    [-12, -36.2],
-    [8, -36.3],
-    [-8, 36.2],
-    [14, 36.1],
-    [28.3, 22],
-    [-28.4, 24],
-  ].forEach(([x, z]) => pushPalm(x, z));
-
-  pushBox(-4, 0.06, -33.2, 2.4, 0.1, 2.4, 0xff6a1a, false);
-  pushBox(4, 0.06, 33.2, 2.4, 0.1, 2.4, 0x5b4dff, false);
-
-  const merged = mergeGeometries(geos, false);
-  if (merged) scene.add(new THREE.Mesh(merged, inkMat));
-  else geos.forEach((g) => scene.add(new THREE.Mesh(g, inkMat)));
-
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(56, 8.6),
-    new THREE.MeshLambertMaterial({ color: 0x1498b8, transparent: true, opacity: 0.78 }),
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.08;
-  scene.add(water);
 
   const clouds: THREE.Mesh[] = [];
   for (let i = 0; i < 5; i++) {
@@ -528,7 +401,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const rodGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6);
   rodGeo.rotateZ(Math.PI / 2);
   const rodMat = new THREE.MeshLambertMaterial({ color: 0x6b4226 });
-  const hangBanner = (x: number, z: number, rotY: number, i: number) => {
+  const decoMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const levelGroup = new THREE.Group();
+  scene.add(levelGroup);
+  const waterMeshes: THREE.Mesh[] = [];
+  let levelTrash: { dispose(): void }[] = [];
+  let level: LevelDef = LEVEL_DEFS[bridge.config.current.level] ?? LEVEL_DEFS.harbor;
+  let levelWater: Rect[] = waterRects(level);
+
+  function hangBanner(x: number, z: number, rotY: number, i: number) {
     const g = new THREE.Group();
     const cloth = new THREE.Mesh(bannerGeo, etles[i % etles.length]);
     cloth.position.y = 2.3;
@@ -537,16 +418,140 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     g.add(cloth, rod);
     g.position.set(x, 0, z);
     g.rotation.y = rotY;
-    scene.add(g);
-  };
-  [-30, -19, 16, 31].forEach((z, i) => {
-    hangBanner(-30.45, z, Math.PI / 2, i);
-    hangBanner(30.45, z, -Math.PI / 2, i + 1);
-  });
-  hangBanner(-18, -38.45, 0, 2);
-  hangBanner(16, -38.45, 0, 0);
-  hangBanner(-16, 38.45, Math.PI, 1);
-  hangBanner(20, 38.45, Math.PI, 2);
+    levelGroup.add(g);
+  }
+
+  /** Rebuilds solids, meshes, water, sky and the paintable mask for a level. */
+  function buildLevel(def: LevelDef) {
+    for (const d of levelTrash) d.dispose();
+    levelTrash = [];
+    levelGroup.clear();
+    waterMeshes.length = 0;
+    solids.length = 0;
+    level = def;
+    levelWater = waterRects(def);
+
+    const geos: THREE.BufferGeometry[] = [];
+    const deco: THREE.BufferGeometry[] = [];
+    const add = (g: THREE.BufferGeometry, color: number, m: THREE.Matrix4, isDeco: boolean) => {
+      colorize(g, color);
+      g.applyMatrix4(m);
+      (isDeco ? deco : geos).push(g);
+    };
+    const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);
+    function pushBox(cx: number, cy: number, cz: number, w: number, h: number, d: number, color: number, solid = true, isDeco = false) {
+      add(new THREE.BoxGeometry(w, h, d), color, at(cx, cy, cz), isDeco);
+      if (solid) {
+        solids.push({
+          minX: cx - w / 2,
+          maxX: cx + w / 2,
+          minY: cy - h / 2,
+          maxY: cy + h / 2,
+          minZ: cz - d / 2,
+          maxZ: cz + d / 2,
+        });
+      }
+    }
+    function pushStairs(x: number, zEdge: number, dir: number, width: number, totalH: number, run: number, steps: number, color: number) {
+      const sd = run / steps;
+      for (let i = 0; i < steps; i++) {
+        const h = (totalH * (steps - i)) / steps;
+        const zc = zEdge + dir * (sd * i + sd / 2);
+        pushBox(x, h / 2, zc, width, h, Math.max(0.2, sd - 0.06), color, true);
+      }
+    }
+    function pushPalm(x: number, z: number) {
+      const h = 3.5;
+      add(new THREE.CylinderGeometry(0.1, 0.2, h, 6), 0x8d5a32, at(x, h / 2, z), true);
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const m = new THREE.Matrix4().makeRotationX(1.05);
+        m.premultiply(new THREE.Matrix4().makeRotationY(ang));
+        m.setPosition(x + Math.sin(ang) * 0.45, h - 0.05, z + Math.cos(ang) * 0.45);
+        add(new THREE.BoxGeometry(0.22, 0.06, 1.45), i % 2 === 0 ? 0x2fae55 : 0x46c86a, m, true);
+      }
+    }
+    // Tall Xinjiang poplar (تېرەك): a slim trunk under a narrow column of leaves.
+    function pushPoplar(x: number, z: number) {
+      add(new THREE.CylinderGeometry(0.1, 0.16, 1.6, 6), 0x7a5a3a, at(x, 0.8, z), true);
+      add(new THREE.ConeGeometry(0.75, 6.2, 7), 0x4f9a3f, at(x, 4.4, z), true);
+      add(new THREE.ConeGeometry(0.55, 4, 7), 0x6fb84f, at(x, 5.8, z), true);
+    }
+
+    const ground = new THREE.PlaneGeometry(MAP.w, MAP.d);
+    ground.rotateX(-Math.PI / 2);
+    add(ground, def.ground, at(0, 0, 0), false);
+    pushBox(0, 2.1, -39.2, 64, 4.2, 1.3, def.wall, true);
+    pushBox(0, 2.1, 39.2, 64, 4.2, 1.3, def.wall, true);
+    pushBox(-31.2, 2.1, 0, 1.3, 4.2, 80, def.wall, true);
+    pushBox(31.2, 2.1, 0, 1.3, 4.2, 80, def.wall, true);
+    if (def.wallCap !== undefined) {
+      pushBox(0, 4.35, -39.2, 64.2, 0.3, 1.5, def.wallCap, false, true);
+      pushBox(0, 4.35, 39.2, 64.2, 0.3, 1.5, def.wallCap, false, true);
+      pushBox(-31.2, 4.35, 0, 1.5, 0.3, 80.2, def.wallCap, false, true);
+      pushBox(31.2, 4.35, 0, 1.5, 0.3, 80.2, def.wallCap, false, true);
+    }
+    for (const p of def.prims) {
+      if (p.t === "box") pushBox(p.x, p.y, p.z, p.w, p.h, p.d, p.c, !p.deco, !!p.deco);
+      else if (p.t === "stairs") pushStairs(p.x, p.z, p.dir, p.w, p.h, p.run, p.steps, p.c);
+      else if (p.t === "palm") pushPalm(p.x, p.z);
+      else if (p.t === "poplar") pushPoplar(p.x, p.z);
+      else if (p.t === "dome") add(new THREE.SphereGeometry(p.r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), p.c, at(p.x, p.y, p.z), true);
+      else if (p.t === "peak") {
+        add(new THREE.ConeGeometry(p.r, p.h, 6), p.c, at(p.x, p.h / 2 - 1, p.z), true);
+        add(new THREE.ConeGeometry(p.r * 0.55, p.h * 0.7, 5), 0x9c2f1c, at(p.x + p.r * 0.5, p.h * 0.35 - 1, p.z - p.r * 0.3), true);
+      }
+    }
+    pushBox(-4, 0.06, -33.2, 2.4, 0.1, 2.4, 0xff6a1a, false);
+    pushBox(4, 0.06, 33.2, 2.4, 0.1, 2.4, 0x5b4dff, false);
+
+    for (const [list, mat] of [
+      [geos, inkMat],
+      [deco, decoMat],
+    ] as [THREE.BufferGeometry[], THREE.Material][]) {
+      if (!list.length) continue;
+      const merged = mergeGeometries(list, false);
+      list.forEach((g) => g.dispose());
+      if (!merged) continue;
+      levelGroup.add(new THREE.Mesh(merged, mat));
+      levelTrash.push(merged);
+    }
+
+    const waterMat = new THREE.MeshLambertMaterial({ color: def.water, transparent: true, opacity: 0.78 });
+    levelTrash.push(waterMat);
+    for (const r of levelWater) {
+      const g = new THREE.PlaneGeometry(r.maxX - r.minX, r.maxZ - r.minZ);
+      levelTrash.push(g);
+      const m = new THREE.Mesh(g, waterMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((r.minX + r.maxX) / 2, 0.08, (r.minZ + r.maxZ) / 2);
+      levelGroup.add(m);
+      waterMeshes.push(m);
+    }
+
+    [-30, -19, 16, 31].forEach((z, i) => {
+      hangBanner(-30.45, z, Math.PI / 2, i);
+      hangBanner(30.45, z, -Math.PI / 2, i + 1);
+    });
+    hangBanner(-18, -38.45, 0, 2);
+    hangBanner(16, -38.45, 0, 0);
+    hangBanner(-16, 38.45, Math.PI, 1);
+    hangBanner(20, 38.45, Math.PI, 2);
+
+    renderer.setClearColor(def.sky, 1);
+    (scene.background as THREE.Color).set(def.sky);
+    (scene.fog as THREE.Fog).color.set(def.fog);
+    fogCol.set(def.fog);
+
+    for (let iz = 0; iz < GH; iz++) {
+      for (let ix = 0; ix < GW; ix++) {
+        const x = MAP.minX + ((ix + 0.5) / GW) * MAP.w;
+        const z = MAP.minZ + ((iz + 0.5) / GH) * MAP.d;
+        mask[iz * GW + ix] = waterAt(x, z) ? 0 : 1;
+      }
+    }
+    clearInk();
+  }
 
   function standHeight(x: number, z: number, feetY: number) {
     let h = 0;
@@ -560,23 +565,23 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function surfaceTop(x: number, z: number) {
     return standHeight(x, z, 80);
   }
-  function inWater(x: number, y: number, z: number) {
-    if (y > 0.48) return false;
-    if (Math.abs(z) > 4.45 || Math.abs(x) > 28.2) return false;
-    return surfaceTop(x, z) < 0.4;
-  }
-
-  for (let iz = 0; iz < GH; iz++) {
-    for (let ix = 0; ix < GW; ix++) {
-      const x = MAP.minX + ((ix + 0.5) / GW) * MAP.w;
-      const z = MAP.minZ + ((iz + 0.5) / GH) * MAP.d;
-      const h = surfaceTop(x, z);
-      const channel = Math.abs(z) <= 4.45 && Math.abs(x) <= 28.2 && h < 0.4;
-      mask[iz * GW + ix] = channel ? 0 : 1;
+  /** Open water (not covered by a dock or bridge) within `margin` of a water rect. */
+  function waterAt(x: number, z: number, margin = 0) {
+    for (const r of levelWater) {
+      if (x >= r.minX - margin && x <= r.maxX + margin && z >= r.minZ - margin && z <= r.maxZ + margin) return surfaceTop(x, z) < 0.4;
     }
+    return false;
+  }
+  /** Near a water rect at all, bridges included. */
+  function nearWater(x: number, z: number, margin: number) {
+    return levelWater.some((r) => x >= r.minX - margin && x <= r.maxX + margin && z >= r.minZ - margin && z <= r.maxZ + margin);
+  }
+  function inWater(x: number, y: number, z: number) {
+    return y <= 0.48 && waterAt(x, z);
   }
 
   let paintDirty = false;
+  buildLevel(level);
   function tuneFor(a: Actor): Tune {
     return a.team === 2 ? TUNE[bridge.config.current.difficulty] ?? TUNE.normal : TUNE.normal;
   }
@@ -615,7 +620,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (by && by.team === team) {
       by.painted += flipped;
-      if (meter) by.special = Math.min(100, by.special + radius * 0.11 * (by.isPlayer ? 1 : tuneFor(by).meter));
+      if (meter) by.special = Math.min(100, by.special + radius * 0.11 * by.mods.meter * (by.isPlayer ? 1 : tuneFor(by).meter));
     }
   }
   function teamAt(x: number, z: number): number {
@@ -714,14 +719,188 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (map) map.needsUpdate = true;
   }
 
-  function makeKid(team: Team, name: string): Kid {
+  // ── Characters ────────────────────────────────────────────────
+  // Everyone shares the team-coloured body; headwear and props set each character apart.
+  const SKIN: Record<CharacterId, number> = {
+    wave: 0xffc7a8,
+    doppa: 0xf1b791,
+    braids: 0xffd2b5,
+    telpek: 0xe7a97f,
+    scarf: 0xffcdb0,
+    dutar: 0xd99c75,
+  };
+  const skinMats = new Map<number, THREE.Material>();
+  const skinFor = (c: CharacterId) => {
+    const hex = SKIN[c];
+    if (!skinMats.has(hex)) skinMats.set(hex, new THREE.MeshLambertMaterial({ color: hex }));
+    return skinMats.get(hex)!;
+  };
+
+  // A doppa's four panels each carry a white almond (badam) motif on dark velvet.
+  function makeDoppaTex(base: string, motif: string) {
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 64;
+    const g = c.getContext("2d")!;
+    g.fillStyle = base;
+    g.fillRect(0, 0, 256, 64);
+    g.fillStyle = motif;
+    g.strokeStyle = motif;
+    g.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      const cx = i * 64 + 32;
+      g.beginPath();
+      g.ellipse(cx, 36, 11, 17, 0.5, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(cx + 9, 17, 7, Math.PI * 0.9, Math.PI * 2.1);
+      g.stroke();
+      g.fillStyle = base;
+      g.beginPath();
+      g.ellipse(cx - 1, 38, 4, 7, 0.5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = motif;
+    }
+    g.fillRect(0, 58, 256, 3);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const hairMat = new THREE.MeshLambertMaterial({ color: 0x24160f });
+  const doppaMen = new THREE.MeshLambertMaterial({ map: makeDoppaTex("#15181d", "#f4efe4") });
+  const doppaGirl = new THREE.MeshLambertMaterial({ map: makeDoppaTex("#8e1230", "#f2c230") });
+  const furMat = new THREE.MeshLambertMaterial({ color: 0x3b2618 });
+  const furRim = new THREE.MeshLambertMaterial({ color: 0x6b4a32 });
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0xa0612c });
+  const woodDark = new THREE.MeshLambertMaterial({ color: 0x5a3418 });
+  const scarfMat = new THREE.MeshLambertMaterial({ map: etles[1].map, side: THREE.DoubleSide });
+  const geoHair = new THREE.SphereGeometry(0.315, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56);
+  const geoDoppa = new THREE.CylinderGeometry(0.3, 0.36, 0.2, 4).rotateY(Math.PI / 4);
+  const geoDoppaSmall = new THREE.CylinderGeometry(0.24, 0.3, 0.16, 4).rotateY(Math.PI / 4);
+  const geoBraid = new THREE.CylinderGeometry(0.036, 0.026, 0.62, 5);
+  // Telpek: a round sheepskin hat. A position-based wobble keeps seam vertices together
+  // while making the surface lumpy like curly fleece.
+  const fleece = (g: THREE.BufferGeometry, amp: number) => {
+    const pos = g.getAttribute("position");
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const n = Math.sin(v.x * 41) * Math.sin(v.y * 37) * Math.sin(v.z * 43);
+      v.multiplyScalar(1 + n * amp);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();
+    return g;
+  };
+  const geoTelpek = fleece(new THREE.SphereGeometry(0.4, 18, 12).scale(1, 0.95, 1), 0.07);
+  const geoTelpekRim = fleece(new THREE.TorusGeometry(0.31, 0.085, 8, 22).rotateX(Math.PI / 2), 0.12);
+  const geoScarf = new THREE.SphereGeometry(0.345, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.58);
+  const geoKnot = new THREE.SphereGeometry(0.075, 8, 6);
+  const geoTail = new THREE.ConeGeometry(0.075, 0.36, 5).rotateX(Math.PI);
+  const geoDutarBody = new THREE.SphereGeometry(0.15, 12, 8);
+  const geoDutarNeck = new THREE.CylinderGeometry(0.022, 0.028, 1, 5);
+  const HEAD_Y = 1.48;
+
+  /**
+   * syncVisuals swings tentL/tentR around z by ±0.35 (tuned for the wave kid's tentacles).
+   * Other characters hang their swaying parts inside an inner group that cancels that base tilt.
+   */
+  function swayPivot(x: number, y: number, z: number, side: 1 | -1, parts: THREE.Object3D[]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    pivot.rotation.z = 0.35 * side;
+    const inner = new THREE.Group();
+    inner.rotation.z = -0.35 * side;
+    inner.add(...parts);
+    pivot.add(inner);
+    return pivot;
+  }
+  const hair = () => {
+    const m = new THREE.Mesh(geoHair, hairMat);
+    m.position.y = HEAD_Y;
+    m.rotation.x = -0.6;
+    return m;
+  };
+
+  function headwear(char: CharacterId, team: Team): { parts: THREE.Object3D[]; tentL: THREE.Object3D; tentR: THREE.Object3D } {
+    if (char === "wave") {
+      const tentL = new THREE.Mesh(geoTent, cloth[team]);
+      const tentR = new THREE.Mesh(geoTent, cloth[team]);
+      tentL.position.set(-0.16, 1.86, -0.02);
+      tentR.position.set(0.16, 1.86, -0.02);
+      tentL.rotation.z = 0.35;
+      tentR.rotation.z = -0.35;
+      const mid = new THREE.Mesh(geoTent, cloth[team]);
+      mid.position.set(0, 1.92, -0.08);
+      mid.scale.set(1.1, 1.15, 1);
+      return { parts: [tentL, tentR, mid], tentL, tentR };
+    }
+    if (char === "braids") {
+      const cap = new THREE.Mesh(geoDoppaSmall, doppaGirl);
+      cap.position.y = HEAD_Y + 0.29;
+      const braid = (x: number) => {
+        const b = new THREE.Mesh(geoBraid, hairMat);
+        b.position.set(x, -0.31, 0);
+        return b;
+      };
+      const tentL = swayPivot(-0.09, 1.6, -0.24, 1, [braid(-0.1), braid(-0.03), braid(0.04)]);
+      const tentR = swayPivot(0.09, 1.6, -0.24, -1, [braid(-0.04), braid(0.03), braid(0.1)]);
+      tentL.rotation.x = tentR.rotation.x = 0.18;
+      return { parts: [hair(), cap, tentL, tentR], tentL, tentR };
+    }
+    if (char === "telpek") {
+      const hat = new THREE.Mesh(geoTelpek, furMat);
+      hat.position.y = HEAD_Y + 0.28;
+      const rim = new THREE.Mesh(geoTelpekRim, furRim);
+      rim.position.y = HEAD_Y + 0.14;
+      return { parts: [hair(), hat, rim], tentL: new THREE.Object3D(), tentR: new THREE.Object3D() };
+    }
+    if (char === "scarf") {
+      const scarf = new THREE.Mesh(geoScarf, scarfMat);
+      scarf.position.y = HEAD_Y;
+      scarf.rotation.x = -0.62;
+      const knot = new THREE.Mesh(geoKnot, scarfMat);
+      knot.position.set(0, 1.3, -0.27);
+      const tail = () => {
+        const t = new THREE.Mesh(geoTail, scarfMat);
+        t.position.y = -0.18;
+        return t;
+      };
+      const tentL = swayPivot(-0.05, 1.3, -0.29, 1, [tail()]);
+      const tentR = swayPivot(0.05, 1.3, -0.29, -1, [tail()]);
+      return { parts: [scarf, knot, tentL, tentR], tentL, tentR };
+    }
+    // doppa and dutar both wear the men's black-and-white doppa.
+    const cap = new THREE.Mesh(geoDoppa, doppaMen);
+    cap.position.y = HEAD_Y + 0.26;
+    const parts: THREE.Object3D[] = [hair(), cap];
+    if (char === "dutar") {
+      // A long-necked two-string dutar slung across the back.
+      const dutar = new THREE.Group();
+      const bowl = new THREE.Mesh(geoDutarBody, woodMat);
+      bowl.scale.set(1, 1.3, 0.55);
+      const neck = new THREE.Mesh(geoDutarNeck, woodDark);
+      neck.position.y = 0.62;
+      const peg = new THREE.Mesh(geoKnot, woodDark);
+      peg.position.y = 1.12;
+      peg.scale.setScalar(0.7);
+      dutar.add(bowl, neck, peg);
+      dutar.position.set(0.08, 0.86, -0.3);
+      dutar.rotation.set(0.12, 0, 0.5);
+      parts.push(dutar);
+    }
+    return { parts, tentL: new THREE.Object3D(), tentR: new THREE.Object3D() };
+  }
+
+  function makeKid(team: Team, name: string, char: CharacterId = "wave"): Kid {
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
+    const skinMat = skinFor(char);
     const torso = new THREE.Mesh(geoTorso, cloth[team]);
     torso.position.y = 0.92;
-    const head = new THREE.Mesh(geoHead, skin);
-    head.position.set(0, 1.48, 0);
+    const head = new THREE.Mesh(geoHead, skinMat);
+    head.position.set(0, HEAD_Y, 0);
     const eyeL = new THREE.Mesh(geoEye, white);
     const eyeR = new THREE.Mesh(geoEye, white);
     eyeL.position.set(-0.1, 1.52, 0.22);
@@ -730,15 +909,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const pR = new THREE.Mesh(geoPupil, pupil);
     pL.position.set(-0.1, 1.51, 0.28);
     pR.position.set(0.1, 1.51, 0.28);
-    const tentL = new THREE.Mesh(geoTent, cloth[team]);
-    const tentR = new THREE.Mesh(geoTent, cloth[team]);
-    tentL.position.set(-0.16, 1.86, -0.02);
-    tentR.position.set(0.16, 1.86, -0.02);
-    tentL.rotation.z = 0.35;
-    tentR.rotation.z = -0.35;
-    const mid = new THREE.Mesh(geoTent, cloth[team]);
-    mid.position.set(0, 1.92, -0.08);
-    mid.scale.set(1.1, 1.15, 1);
+    const { parts, tentL, tentR } = headwear(char, team);
     const shortM = new THREE.Mesh(geoShort, shorts[team]);
     shortM.position.y = 0.62;
     shortM.scale.set(1.05, 0.55, 1.05);
@@ -747,8 +918,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const pivR = new THREE.Group();
     pivL.position.set(-0.12, 0.52, 0);
     pivR.position.set(0.12, 0.52, 0);
-    const legL = new THREE.Mesh(geoLeg, skin);
-    const legR = new THREE.Mesh(geoLeg, skin);
+    const legL = new THREE.Mesh(geoLeg, skinMat);
+    const legR = new THREE.Mesh(geoLeg, skinMat);
     legL.position.set(0, -0.18, 0);
     legR.position.set(0, -0.18, 0);
     const shoeL = new THREE.Mesh(geoShoe, dark);
@@ -772,7 +943,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       weapons[k].visible = k === "spritzer";
       mount.add(weapons[k]);
     });
-    body.add(torso, head, eyeL, eyeR, pL, pR, tentL, tentR, mid, shortM, legs, mount);
+    body.add(torso, head, eyeL, eyeR, pL, pR, ...parts, shortM, legs, mount);
     const nameCanvas = document.createElement("canvas");
     nameCanvas.width = 256;
     nameCanvas.height = 64;
@@ -780,13 +951,24 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     ntex.colorSpace = THREE.SRGBColorSpace;
     const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: ntex, transparent: true, depthTest: true }));
     nameSprite.scale.set(1.8, 0.45, 1);
-    nameSprite.position.y = 2.25;
+    nameSprite.position.y = char === "telpek" ? 2.45 : 2.25;
     root.add(nameSprite);
-    const kid: Kid = { root, body, legs, tentL, tentR, mount, weapons, nameSprite, nameCanvas };
+    const kid: Kid = { root, body, legs, tentL, tentR, mount, weapons, nameSprite, nameCanvas, char };
     writeName(kid, name, team);
     scene.add(root);
     root.visible = false;
     return kid;
+  }
+
+  /** Frees what a kid owns outright: its weapon meshes and name tag. Shared parts stay. */
+  function disposeKid(kid: Kid) {
+    scene.remove(kid.root);
+    kid.mount.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+    });
+    const mat = kid.nameSprite.material as THREE.SpriteMaterial;
+    mat.map?.dispose();
+    mat.dispose();
   }
 
   function setWeapon(kid: Kid, w: WeaponId) {
@@ -795,18 +977,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     });
   }
 
-  const BOTS: { name: string; team: Team; weapon: WeaponId }[] = [
-    { name: "ئايگۈل", team: 1, weapon: "spritzer" },
-    { name: "باتۇر", team: 1, weapon: "roller" },
-    { name: "دىلشات", team: 1, weapon: "blaster" },
-    { name: "نىگار", team: 2, weapon: "spritzer" },
-    { name: "ئەركىن", team: 2, weapon: "charger" },
-    { name: "مەرۋە", team: 2, weapon: "blaster" },
-    { name: "ئالىم", team: 2, weapon: "roller" },
+  const BOTS: { name: string; team: Team; weapon: WeaponId; char: CharacterId }[] = [
+    { name: "ئايگۈل", team: 1, weapon: "spritzer", char: "scarf" },
+    { name: "باتۇر", team: 1, weapon: "roller", char: "telpek" },
+    { name: "دىلشات", team: 1, weapon: "blaster", char: "dutar" },
+    { name: "نىگار", team: 2, weapon: "spritzer", char: "braids" },
+    { name: "ئەركىن", team: 2, weapon: "charger", char: "doppa" },
+    { name: "مەرۋە", team: 2, weapon: "blaster", char: "scarf" },
+    { name: "ئالىم", team: 2, weapon: "roller", char: "wave" },
   ];
 
   const actors: Actor[] = [];
-  function blankActor(name: string, team: Team, isPlayer: boolean, weapon: WeaponId): Actor {
+  function blankActor(name: string, team: Team, isPlayer: boolean, weapon: WeaponId, char: CharacterId): Actor {
     return {
       name,
       team,
@@ -844,12 +1026,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       painted: 0,
       rush: 0,
       stuck: 0,
-      mesh: makeKid(team, name),
+      char,
+      mods: characterById(char).mods,
+      mesh: makeKid(team, name, char),
     };
   }
-  actors.push(blankActor("ۋارىس", 1, true, "spritzer"));
-  BOTS.forEach((b) => actors.push(blankActor(b.name, b.team, false, b.weapon)));
-  const hero = makeKid(1, "ۋارىس");
+  const startChar = bridge.config.current.character;
+  actors.push(blankActor("ۋارىس", 1, true, "spritzer", startChar));
+  BOTS.forEach((b) => actors.push(blankActor(b.name, b.team, false, b.weapon, b.char)));
+  let hero = makeKid(1, "ۋارىس", startChar);
   hero.root.visible = false;
 
   // Name tags are drawn on canvas, which never triggers a web-font load on its own.
@@ -1145,6 +1330,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function hurt(target: Actor, amount: number, by: Actor | null, how: "splat" | "water") {
     if (!target.alive || (how === "splat" && target.invuln > 0)) return;
     if (target.isPlayer && by && !by.isPlayer) amount *= tuneFor(by).dmg;
+    if (how === "splat") amount *= target.mods.armor;
     if (by?.isPlayer && !target.isPlayer && amount > 0) {
       if (hitMark < 0.55) audio.hit();
       hitMark = 1;
@@ -1166,7 +1352,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (target.isPlayer) setBanner("سۇغا چۈشتىڭىز!");
     } else if (by) {
       by.splats += 1;
-      by.special = Math.min(100, by.special + 28 * (by.isPlayer ? 1 : tuneFor(by).meter));
+      by.special = Math.min(100, by.special + 28 * by.mods.meter * (by.isPlayer ? 1 : tuneFor(by).meter));
       if (by.isPlayer) {
         killMark = 1;
         setBanner("پاكىز زەربە!");
@@ -1590,10 +1776,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.ink = Math.min(100, a.ink + 30 * dt);
       paint(a.x, a.z, 1.15, a.team, a);
     }
-    if (a.swimming) a.ink = Math.min(100, a.ink + 46 * dt);
-    else a.ink = Math.min(100, a.ink + (rush ? 0 : 11) * dt);
+    if (a.swimming) a.ink = Math.min(100, a.ink + 46 * a.mods.ink * dt);
+    else a.ink = Math.min(100, a.ink + (rush ? 0 : 11 * a.mods.ink) * dt);
     if (!rush && floor === (a.team === 1 ? 2 : 1) && a.grounded && a.invuln <= 0) {
-      a.splat = Math.min(100, a.splat + 16 * dt);
+      a.splat = Math.min(100, a.splat + 16 * a.mods.armor * dt);
       if (a.splat >= 100) hurt(a, 0, null, "splat");
     } else if (floor === a.team || !a.grounded) {
       a.splat = Math.max(0, a.splat - 22 * dt);
@@ -1630,8 +1816,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const floor = teamAt(a.x, a.z);
     const wantSwim = held("ShiftLeft") || held("ShiftRight") || input.swim;
     a.swimming = !!(wantSwim && a.grounded && floor === a.team && a.rush <= 0);
-    let speed = 6.35;
-    if (a.swimming) speed = 11.4;
+    let speed = 6.35 * a.mods.run;
+    if (a.swimming) speed = 11.4 * a.mods.swim;
     else if (a.rush > 0) speed = 10.2;
     else if (floor && floor !== a.team) speed = 2.65;
     if (a.weapon === "roller" && (fireMouse || input.fire) && a.grounded) speed *= 0.9;
@@ -1661,7 +1847,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     for (let n = 0; n < 8; n++) {
       const x = -24 + rand() * 48;
       const z = -32 + rand() * 64;
-      if (Math.abs(z) < 5 && surfaceTop(x, z) < 0.4) continue;
+      if (waterAt(x, z, 0.8)) continue;
       const owned = teamAt(x, z) === a.team ? 0 : 2;
       const forwardBias = a.team === 1 ? z : -z;
       const score = owned * 3 + forwardBias * 0.05 - Math.hypot(x - a.x, z - a.z) * 0.02;
@@ -1675,24 +1861,83 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.goalZ = bestZ;
   }
 
-  // The water channel (|z| < 4.45) is only crossable on the two side docks and the central
-  // platform. Bots heading across line up with the nearest crossing on their own bank, then
-  // walk straight over it, instead of beelining into the water.
-  const CROSSINGS: [x: number, halfWidth: number][] = [
-    [-18, 2.8],
-    [0, 3.8],
-    [18, 2.8],
-  ];
+  /** Would a hop in direction (dx, dz) come down in water? */
+  function waterAhead(x: number, z: number, dx: number, dz: number) {
+    for (const d of [1.5, 2.5, 3.5]) if (waterAt(x + dx * d, z + dz * d)) return true;
+    return false;
+  }
+
+  function segHitsRect(x0: number, z0: number, x1: number, z1: number, r: Rect) {
+    let t0 = 0;
+    let t1 = 1;
+    const p = [x0 - x1, x1 - x0, z0 - z1, z1 - z0];
+    const q = [x0 - r.minX, r.maxX - x0, z0 - r.minZ, r.maxZ - z0];
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) {
+        if (q[i] < 0) return false;
+        continue;
+      }
+      const t = q[i] / p[i];
+      if (p[i] < 0) {
+        if (t > t1) return false;
+        t0 = Math.max(t0, t);
+      } else {
+        if (t < t0) return false;
+        t1 = Math.min(t1, t);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Where a bot should walk next on its way to (gx, gz) without swimming.
+   * Channels: line up with the nearest crossing on your own bank, then walk straight over it.
+   * Pools: head for the cheapest visible corner of the pool's padded outline.
+   */
   function navTarget(a: Actor, gx: number, gz: number): [number, number] {
-    const goalSide = gz >= 0 ? 1 : -1;
-    const side = a.z >= 0 ? 1 : -1;
-    if (side === goalSide && Math.abs(a.z) > 5.2) return [gx, gz];
-    const ref = Math.abs(a.z) < 7 ? a.x : (a.x + gx) / 2;
-    let best = CROSSINGS[0];
-    for (const c of CROSSINGS) if (Math.abs(c[0] - ref) < Math.abs(best[0] - ref)) best = c;
-    const [bx, half] = best;
-    if (Math.abs(a.x - bx) > half) return [bx, side * 7.5];
-    return [bx, goalSide * 7.5];
+    const ch = level.channel;
+    if (ch) {
+      const half = ch.rect.maxZ;
+      const goalSide = gz >= 0 ? 1 : -1;
+      const side = a.z >= 0 ? 1 : -1;
+      if (side !== goalSide || Math.abs(a.z) <= half + 0.75) {
+        const ref = Math.abs(a.z) < half + 2.55 ? a.x : (a.x + gx) / 2;
+        let best = ch.crossings[0];
+        for (const c of ch.crossings) if (Math.abs(c[0] - ref) < Math.abs(best[0] - ref)) best = c;
+        const [bx, bh] = best;
+        const lane = half + 3.05;
+        if (Math.abs(a.x - bx) > bh) return [bx, side * lane];
+        return [bx, goalSide * lane];
+      }
+    }
+    for (const r of level.pools) {
+      const m = 1.5;
+      const pad = { minX: r.minX - m, maxX: r.maxX + m, minZ: r.minZ - m, maxZ: r.maxZ + m };
+      const core = { minX: r.minX - m * 0.6, maxX: r.maxX + m * 0.6, minZ: r.minZ - m * 0.6, maxZ: r.maxZ + m * 0.6 };
+      // A goal right on the rim can never be reached without crossing the core; go straight.
+      if (gx > core.minX && gx < core.maxX && gz > core.minZ && gz < core.maxZ) continue;
+      if (!segHitsRect(a.x, a.z, gx, gz, core)) continue;
+      let tx = gx;
+      let tz = gz;
+      let bestCost = Infinity;
+      for (const [cx, cz] of [
+        [pad.minX, pad.minZ],
+        [pad.minX, pad.maxZ],
+        [pad.maxX, pad.minZ],
+        [pad.maxX, pad.maxZ],
+      ]) {
+        const toCorner = Math.hypot(cx - a.x, cz - a.z);
+        if (toCorner < 1 || segHitsRect(a.x, a.z, cx, cz, core)) continue;
+        const cost = toCorner + Math.hypot(gx - cx, gz - cz);
+        if (cost < bestCost) {
+          bestCost = cost;
+          tx = cx;
+          tz = cz;
+        }
+      }
+      return [tx, tz];
+    }
+    return [gx, gz];
   }
 
   function updateBot(a: Actor, dt: number) {
@@ -1741,18 +1986,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     dx /= dist;
     dz /= dist;
     if (blocked(a.x + dx * 1.1, a.z + dz * 1.1, a.y)) {
+      const safeHop = !waterAhead(a.x, a.z, dx, dz);
       const sx = -dz;
       const sz = dx;
       const flip = Math.sin(a.phase * 2) > 0 ? 1 : -1;
       dx = sx * flip;
       dz = sz * flip;
-      if (a.grounded && rand() > 0.4) {
+      if (a.grounded && safeHop && rand() > 0.4) {
         a.vy = 8.2;
         a.grounded = false;
       }
     }
     // Strafe while fighting, except near the channel where a sidestep means a swim.
-    if (a.mode === "fight" && Math.abs(a.z) > 7) {
+    if (a.mode === "fight" && !nearWater(a.x, a.z, 2.5)) {
       dx += Math.cos(a.phase * 3) * 0.8;
       dz += Math.sin(a.phase * 3) * 0.8;
       const m = Math.hypot(dx, dz) || 1;
@@ -1762,7 +2008,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const wantYaw = yawToward(a.mode === "fight" && nearest ? nearest.x - a.x : dx, a.mode === "fight" && nearest ? nearest.z - a.z : dz);
     let dyaw = Math.atan2(Math.sin(wantYaw - a.yaw), Math.cos(wantYaw - a.yaw));
     a.yaw += clamp(dyaw, -3.2 * dt, 3.2 * dt);
-    let speed = a.swimming ? 10.2 : floor && floor !== a.team ? 2.8 : 5.7;
+    let speed = a.swimming ? 10.2 * a.mods.swim : floor && floor !== a.team ? 2.8 : 5.7 * a.mods.run;
     if (a.weapon === "roller" && a.mode === "push") speed *= 0.92;
     speed *= T.speed;
     const before = Math.hypot(a.vx, a.vz);
@@ -1772,7 +2018,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (a.stuck > 0.8) {
       a.stuck = 0;
       pickGoal(a);
-      if (a.grounded) {
+      const f = yawForward(a.yaw);
+      if (a.grounded && !waterAhead(a.x, a.z, f.x, f.z)) {
         a.vy = 8.2;
         a.grounded = false;
       }
@@ -1818,7 +2065,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   function respawn(a: Actor) {
-    const spots = a.team === 1 ? SPAWN_O : SPAWN_V;
+    const spots = a.team === 1 ? level.spawnO : level.spawnV;
     const s = a.isPlayer ? spots[1] : spots[Math.floor(rand() * spots.length)];
     a.x = s[0];
     a.z = s[1];
@@ -1855,8 +2102,30 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     publish(true);
   }
 
+  function resetWorld() {
+    projs.forEach((p) => (p.alive = false));
+    zones.forEach((z) => {
+      z.alive = false;
+      z.mesh.visible = false;
+    });
+    beacons.forEach((b) => {
+      b.alive = false;
+      b.mesh.visible = false;
+    });
+    decalCursor = 0;
+    decals.count = 0;
+  }
+
+  function setLevel(id: LevelId) {
+    if (level.id === id || !LEVEL_DEFS[id]) return;
+    buildLevel(LEVEL_DEFS[id]);
+    resetWorld();
+    if (mode !== "play") seedMenuInk();
+  }
+
   function startMatch() {
     const cfg = bridge.config.current;
+    if (level.id !== cfg.level && LEVEL_DEFS[cfg.level]) buildLevel(LEVEL_DEFS[cfg.level]);
     clearInk();
     result = null;
     resultSent = false;
@@ -1870,18 +2139,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     mode = "play";
     orangePct = 0;
     bluePct = 0;
-    projs.forEach((p) => (p.alive = false));
-    zones.forEach((z) => {
-      z.alive = false;
-      z.mesh.visible = false;
-    });
-    beacons.forEach((b) => {
-      b.alive = false;
-      b.mesh.visible = false;
-    });
-    decalCursor = 0;
-    decals.count = 0;
+    resetWorld();
     const p = actors[0];
+    if (p.char !== cfg.character) {
+      disposeKid(p.mesh);
+      p.char = cfg.character;
+      p.mods = characterById(p.char).mods;
+      p.mesh = makeKid(1, p.name, p.char);
+    }
     p.name = cfg.name.trim().slice(0, 16) || "ۋارىس";
     p.weapon = cfg.weapon;
     p.sub = cfg.sub;
@@ -1902,8 +2167,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.subCd = 0;
       a.swimming = false;
       a.vy = 0;
-      const spots = a.team === 1 ? SPAWN_O : SPAWN_V;
-      const s = a.isPlayer ? spots[1] : spots[idx % spots.length];
+      const spots = a.team === 1 ? level.spawnO : level.spawnV;
+      // The player always takes spot 1; shift bots by one so nobody spawns on top of them.
+      const s = a.isPlayer ? spots[1] : spots[(idx + 1) % spots.length];
       a.x = s[0];
       a.z = s[1];
       a.y = surfaceTop(a.x, a.z);
@@ -1918,8 +2184,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         writeName(a.mesh, a.name, a.team);
       }
     });
-    for (const s of SPAWN_O) paint(s[0], s[1], 3.3, 1);
-    for (const s of SPAWN_V) paint(s[0], s[1], 3.3, 2);
+    for (const s of level.spawnO) paint(s[0], s[1], 3.3, 1);
+    for (const s of level.spawnV) paint(s[0], s[1], 3.3, 2);
     recount();
     hero.root.visible = false;
     audio.unlock();
@@ -2006,13 +2272,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (!g) return;
     const w = mini.width;
     const h = mini.height;
-    g.fillStyle = "#e6d3b4";
+    g.fillStyle = `#${level.ground.toString(16).padStart(6, "0")}`;
     g.fillRect(0, 0, w, h);
     g.drawImage(inkCanvas, 0, 0, w, h);
     g.fillStyle = "rgba(20,152,184,0.55)";
-    const waterY = (1 - (0 - MAP.minZ) / MAP.d) * h;
-    const waterH = (8.8 / MAP.d) * h;
-    g.fillRect(0, waterY - waterH, w, waterH);
+    for (const r of levelWater) {
+      const x0 = ((r.minX - MAP.minX) / MAP.w) * w;
+      const y0 = (1 - (r.maxZ - MAP.minZ) / MAP.d) * h;
+      g.fillRect(x0, y0, ((r.maxX - r.minX) / MAP.w) * w, ((r.maxZ - r.minZ) / MAP.d) * h);
+    }
     const dot = (x: number, z: number, color: string, rad: number) => {
       const u = (x - MAP.minX) / MAP.w;
       const v = (z - MAP.minZ) / MAP.d;
@@ -2047,7 +2315,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function syncVisuals(dt: number) {
     const t = performance.now() * 0.001;
-    water.position.y = 0.07 + Math.sin(t * 1.6) * 0.02;
+    for (const m of waterMeshes) m.position.y = 0.07 + Math.sin(t * 1.6) * 0.02;
     clouds.forEach((c, i) => {
       c.position.x += dt * (0.35 + i * 0.05);
       if (c.position.x > 36) c.position.x = -36;
@@ -2067,14 +2335,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     } else if (mode === "showcase") {
       const cfg = bridge.config.current;
+      if (hero.char !== cfg.character) {
+        disposeKid(hero);
+        hero = makeKid(1, cfg.name.trim().slice(0, 16) || "ۋارىس", cfg.character);
+      }
       setWeapon(hero, cfg.weapon);
       const hy = surfaceTop(0, -24);
       hero.root.visible = true;
       hero.root.position.set(0, hy, -24);
       hero.root.rotation.y = t * 0.55 + Math.PI;
       hero.body.position.y = Math.sin(t * 2) * 0.03;
-      camera.position.set(2.3, hy + 1.75, -24 + 4.8);
-      camera.lookAt(0, hy + 1.2, -24);
+      camera.position.set(1.5, hy + 1.6, -24 + 3.9);
+      camera.lookAt(0, hy + 1.15, -24);
     }
     if (mode !== "play") return;
     for (const a of actors) {
@@ -2234,9 +2506,12 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     let cx = a.x - f.x * dist * cp + r.x * 0.62;
     let cy = headY + dist * sp * 0.75 + 0.25;
     let cz = a.z - f.z * dist * cp + r.z * 0.62;
-    const hit = castWorld(a.x, headY, a.z, cx - a.x, cy - headY, cz - a.z, Math.hypot(cx - a.x, cy - headY, cz - a.z));
-    if (hit && hit.dist < Math.hypot(cx - a.x, cy - headY, cz - a.z)) {
-      const sc = Math.max(0.25, (hit.dist - 0.25) / Math.hypot(cx - a.x, cy - headY, cz - a.z));
+    // castWorld measures distance along its direction, so the ray must be unit length;
+    // an unnormalised one probed ~4.7x too far and snapped the camera in near any wall.
+    const boom = Math.hypot(cx - a.x, cy - headY, cz - a.z) || 1;
+    const hit = castWorld(a.x, headY, a.z, (cx - a.x) / boom, (cy - headY) / boom, (cz - a.z) / boom, boom);
+    if (hit && hit.dist < boom) {
+      const sc = Math.max(0.25, (hit.dist - 0.25) / boom);
       cx = a.x + (cx - a.x) * sc;
       cy = headY + (cy - headY) * sc;
       cz = a.z + (cz - a.z) * sc;
@@ -2443,6 +2718,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     resume: () => setPaused(false),
     orbit: goOrbit,
     showcase: goShowcase,
+    setLevel,
   };
   window.__inkwave = { startMatch, getPhase: () => phase };
   bridge.onApi(api);

@@ -1,4 +1,4 @@
-import type { Difficulty, MatchResult, Quality, SpecialId, SubId, WeaponId } from "./types";
+import type { CharacterId, Difficulty, LevelId, MatchResult, Quality, SpecialId, SubId, WeaponId } from "./types";
 
 export type SaveData = {
   version: 1;
@@ -14,6 +14,8 @@ export type SaveData = {
   invertY: boolean;
   quality: Quality;
   difficulty: Difficulty;
+  level: LevelId;
+  character: CharacterId;
   /** Lifetime experience; drives the player level. */
   xp: number;
   /** Best single-match turf points. */
@@ -36,6 +38,8 @@ export const DEFAULT_SAVE: SaveData = {
   invertY: false,
   quality: "high",
   difficulty: "normal",
+  level: "harbor",
+  character: "wave",
   xp: 0,
   best: 0,
 };

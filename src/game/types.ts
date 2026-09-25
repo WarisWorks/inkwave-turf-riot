@@ -3,6 +3,8 @@ export type SubId = "pop-bomb" | "ink-beacon";
 export type SpecialId = "tempest" | "reef-rush";
 export type Quality = "low" | "high";
 export type Difficulty = "easy" | "normal" | "hard";
+export type LevelId = "harbor" | "bazaar" | "oasis" | "vineyard";
+export type CharacterId = "wave" | "doppa" | "braids" | "telpek" | "scarf" | "dutar";
 
 export type InputState = {
   ax: number;
@@ -26,6 +28,8 @@ export type LiveConfig = {
   invertY: boolean;
   quality: Quality;
   difficulty: Difficulty;
+  level: LevelId;
+  character: CharacterId;
   input: InputState;
 };
 
@@ -148,6 +152,67 @@ export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
   { id: "tempest", name: "سىياھ بورىنى", blurb: "يامغۇر بۇلۇتى چوڭ بىر دائىرە زېمىننى سىياھقا چىلايدۇ." },
   { id: "reef-rush", name: "مەرجان يۈگۈرۈشى", blurb: "خالىغان يەرگە ئۇچقاندەك يۈگۈرۈپ، ئارقىڭىزدا بويالغان ئىز قالدۇرۇڭ." },
 ];
+
+export const LEVELS: { id: LevelId; name: string; blurb: string }[] = [
+  { id: "harbor", name: "پورت", blurb: "ئوتتۇرىدىن سۇ ئۆتىدۇ — ئىككى پىرىستان ياكى مەركىزى سۇپا ئارقىلىق ئۆتۈڭ." },
+  { id: "bazaar", name: "قەشقەر بازىرى", blurb: "دۇكانلار، دەرۋازىلار ۋە ئوتتۇرىدىكى فونتان — يېقىن ئارىلىقتىكى قىزغىن جەڭ." },
+  { id: "oasis", name: "تەكلىماكان ۋاھەسى", blurb: "قۇم دۆڭلىرى، قەدىمىي خارابىلەر ۋە ئوتتۇرىدىكى كۆل." },
+  { id: "vineyard", name: "تۇرپان ئۈزۈمزارلىقى", blurb: "ئۈزۈم باراڭلىرى، كارىز ئېرىقى ۋە ئوتلۇق تاغ مەنزىرىسى." },
+];
+
+export function levelById(id: LevelId) {
+  return LEVELS.find((l) => l.id === id) ?? LEVELS[0];
+}
+
+/** Small multipliers; 1 means no change. `armor` scales damage taken. */
+export type CharacterMods = { run: number; swim: number; armor: number; meter: number; ink: number };
+
+export type CharacterInfo = { id: CharacterId; name: string; trait: string; blurb: string; mods: CharacterMods };
+
+const BASE_MODS: CharacterMods = { run: 1, swim: 1, armor: 1, meter: 1, ink: 1 };
+
+export const CHARACTERS: CharacterInfo[] = [
+  { id: "wave", name: "دولقۇنچاق", trait: "تەڭپۇڭ", blurb: "سىياھ چېچى بىلەن ھەممە ئىشقا تەييار.", mods: BASE_MODS },
+  {
+    id: "doppa",
+    name: "دوپپىلىق يىگىت",
+    trait: "يۈگۈرۈش سۈرئىتى ‎+8%",
+    blurb: "بادام نەقىشلىك دوپپىسى بىلەن كوچىلاردا ئۇچقاندەك يۈگۈرىدۇ.",
+    mods: { ...BASE_MODS, run: 1.08 },
+  },
+  {
+    id: "braids",
+    name: "ئۆرۈمە چاچلىق قىز",
+    trait: "ئۈزۈش سۈرئىتى ‎+12%",
+    blurb: "ئۇزۇن ئۆرۈمە چاچلىرى دولقۇندەك لەپىلدەيدۇ.",
+    mods: { ...BASE_MODS, swim: 1.12 },
+  },
+  {
+    id: "telpek",
+    name: "تەلپەكلىك باتۇر",
+    trait: "مۇداپىئە ‎+10%",
+    blurb: "قېلىن تەلپىكى سىياھ زەربىسىنى يۇمشىتىدۇ.",
+    mods: { ...BASE_MODS, armor: 0.9 },
+  },
+  {
+    id: "scarf",
+    name: "ئەتلەس ياغلىقلىق قىز",
+    trait: "ئالاھىدە ماھارەت ‎+15%",
+    blurb: "ئەتلەس ياغلىقى ئالاھىدە كۈچنى تېز يىغىدۇ.",
+    mods: { ...BASE_MODS, meter: 1.15 },
+  },
+  {
+    id: "dutar",
+    name: "دۇتارچى",
+    trait: "سىياھ تولۇقلاش ‎+15%",
+    blurb: "دۇتارنىڭ ئاھاڭى بىلەن سىياھ تېز تولىدۇ.",
+    mods: { ...BASE_MODS, ink: 1.15 },
+  },
+];
+
+export function characterById(id: CharacterId) {
+  return CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
+}
 
 export const DIFFICULTIES: { id: Difficulty; name: string }[] = [
   { id: "easy", name: "ئاسان" },
