@@ -16,6 +16,17 @@ const STEP = 1 / 60;
 
 type Team = 1 | 2;
 
+/**
+ * The player's painting gun. It hits harder, paints wider and fires faster than the bots' copies
+ * of the same weapons; bots keep the base numbers (scaled by difficulty).
+ */
+const POWER = {
+  spritzer: { cd: 0.085, ink: 0.9, speed: 40, life: 0.85, dmg: 17, paintR: 1.35, scale: 1.25, trail: 0.55 },
+  blaster: { cd: 0.55, speed: 19, dmg: 34, splash: 45, splashR: 3.8, paintR: 4 },
+  charger: { fullCharge: 0.6, reach: [14, 34], line: [0.6, 0.5], dmg: [30, 90], cost: [6, 12] },
+  roller: { inkPerSec: 11, paintR: 2, reach: 1.8, dps: 110, flicks: 3, flickDmg: 24, flickPaint: 1.5, flickSpeed: 23 },
+} as const;
+
 /** Bot tuning. Only the Violet side scales with difficulty; teammates always play "normal". */
 type Tune = { speed: number; cd: number; spread: number; range: number; think: number; dmg: number; meter: number };
 const TUNE: Record<Difficulty, Tune> = {
@@ -101,6 +112,9 @@ type Proj = {
   kind: "shot" | "bomb" | "beacon" | "flick";
   stuck: boolean;
   owner: number;
+  /** Paint radius dropped along the flight path (0 = none). */
+  trail: number;
+  trailAcc: number;
 };
 
 type Zone = { alive: boolean; x: number; z: number; team: Team; owner: number; life: number; acc: number; r: number; mesh: THREE.Group };
@@ -672,34 +686,50 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const geoShoe = new THREE.SphereGeometry(0.11, 8, 6);
   const geoShort = new THREE.SphereGeometry(0.24, 10, 8);
 
+  // Glossy team-coloured ink tanks make the guns read as loaded and dangerous.
+  const inkGloss = {
+    1: new THREE.MeshPhongMaterial({ color: 0xff6a1a, emissive: 0x552000, shininess: 90, specular: 0xffffff }),
+    2: new THREE.MeshPhongMaterial({ color: 0x5b4dff, emissive: 0x1d1760, shininess: 90, specular: 0xffffff }),
+  } as const;
+
   function makeWeapon(kind: WeaponId, team: Team) {
     const g = new THREE.Group();
     const accent = cloth[team];
+    const tankMat = inkGloss[team];
+    const along = (m: THREE.Mesh, z: number, y = 0) => {
+      m.rotation.x = Math.PI / 2;
+      m.position.set(0, y, z);
+      return m;
+    };
     if (kind === "spritzer") {
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.42), dark);
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.38, 6), accent);
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.z = 0.32;
-      g.add(body, barrel);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.5), dark);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.1), dark);
+      grip.position.set(0, -0.17, -0.06);
+      const tank = along(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.34, 12), tankMat), -0.02, 0.19);
+      const barrel = along(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.5, 8), accent), 0.42);
+      const nozzle = along(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.09, 10), dark), 0.68);
+      g.add(body, grip, tank, barrel, nozzle);
     } else if (kind === "roller") {
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.45), dark);
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.84, 10), accent);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.5), dark);
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.02, 12), accent);
       roll.rotation.z = Math.PI / 2;
-      roll.position.set(0, -0.12, 0.48);
+      roll.position.set(0, -0.12, 0.52);
       roll.name = "roll";
-      g.add(handle, roll);
+      const tank = along(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10), tankMat), -0.1, 0.1);
+      g.add(handle, roll, tank);
     } else if (kind === "charger") {
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.95), dark);
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.2), accent);
-      tip.position.z = 0.5;
-      g.add(body, tip);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.05), dark);
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.22), accent);
+      tip.position.z = 0.6;
+      const scope = along(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8), dark), 0.05, 0.12);
+      const tank = along(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.3, 10), tankMat), -0.3, -0.1);
+      g.add(body, tip, scope, tank);
     } else {
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.36, 8), dark);
-      body.rotation.x = Math.PI / 2;
-      const muzzle = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.22, 8), accent);
-      muzzle.rotation.x = Math.PI / 2;
-      muzzle.position.z = 0.26;
-      g.add(body, muzzle);
+      const body = along(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.44, 10), dark), 0);
+      const muzzle = along(new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.3, 10), accent), 0.32);
+      const tank = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), tankMat);
+      tank.position.set(0, 0.2, -0.08);
+      g.add(body, muzzle, tank);
     }
     return g;
   }
@@ -1074,6 +1104,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       kind: "shot",
       stuck: false,
       owner: 0,
+      trail: 0,
+      trailAcc: 0,
     });
   }
 
@@ -1365,9 +1397,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
   }
 
-  function spawnProj(p: Omit<Proj, "alive" | "stuck">) {
+  function spawnProj(p: Omit<Proj, "alive" | "stuck" | "trail" | "trailAcc"> & { trail?: number }) {
     const slot = projs.find((s) => !s.alive) ?? projs[0];
-    Object.assign(slot, p, { alive: true, stuck: false });
+    Object.assign(slot, { trail: 0, trailAcc: 0 }, p, { alive: true, stuck: false });
   }
 
   function fireDirection(actor: Actor, aimX: number, aimY: number, aimZ: number) {
@@ -1380,70 +1412,83 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   function shootSpritzer(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
-    if (actor.ink < 1.1 || actor.fireCd > 0) return;
-    actor.ink -= 1.15;
-    actor.fireCd = fromPlayer ? 0.11 : 0.2 * tuneFor(actor).cd;
+    const P = POWER.spritzer;
+    const cost = fromPlayer ? P.ink : 1.15;
+    if (actor.ink < cost || actor.fireCd > 0) return;
+    actor.ink -= cost;
+    actor.fireCd = fromPlayer ? P.cd : 0.2 * tuneFor(actor).cd;
     const f = yawForward(actor.yaw);
+    const speed = fromPlayer ? P.speed : 34;
     spawnProj({
       x: actor.x + f.x * 0.55,
       y: actor.y + 1.15,
       z: actor.z + f.z * 0.55,
-      vx: dir.x * 34,
-      vy: dir.y * 34,
-      vz: dir.z * 34,
+      vx: dir.x * speed,
+      vy: dir.y * speed,
+      vz: dir.z * speed,
       grav: 7,
-      life: 0.78,
+      life: fromPlayer ? P.life : 0.78,
       team: actor.team,
-      dmg: 12,
+      dmg: fromPlayer ? P.dmg : 12,
       splash: 0,
       splashR: 0,
-      paintR: 0.92,
-      hitR: 0.28,
-      scale: 0.85,
+      paintR: fromPlayer ? P.paintR : 0.92,
+      hitR: fromPlayer ? 0.34 : 0.28,
+      scale: fromPlayer ? P.scale : 0.85,
       kind: "shot",
       owner: actors.indexOf(actor),
+      trail: fromPlayer ? P.trail : 0,
     });
-    burst(actor.x + f.x * 0.7, actor.y + 1.15, actor.z + f.z * 0.7, actor.team, 3, 2);
+    burst(actor.x + f.x * 0.7, actor.y + 1.15, actor.z + f.z * 0.7, actor.team, fromPlayer ? 6 : 3, fromPlayer ? 3.2 : 2);
     if (fromPlayer) {
       shake = Math.min(0.4, shake + 0.035);
       audio.shoot(620);
+      audio.splash(0.35);
     }
   }
 
   function shootBlaster(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
     if (actor.ink < 14 || actor.fireCd > 0) return;
     actor.ink -= 14;
-    actor.fireCd = fromPlayer ? 0.72 : 1.05 * tuneFor(actor).cd;
+    const P = POWER.blaster;
+    actor.fireCd = fromPlayer ? P.cd : 1.05 * tuneFor(actor).cd;
     const f = yawForward(actor.yaw);
+    const speed = fromPlayer ? P.speed : 16;
     spawnProj({
       x: actor.x + f.x * 0.6,
       y: actor.y + 1.25,
       z: actor.z + f.z * 0.6,
-      vx: dir.x * 16,
-      vy: dir.y * 16 + 6.5,
-      vz: dir.z * 16,
+      vx: dir.x * speed,
+      vy: dir.y * speed + 6.5,
+      vz: dir.z * speed,
       grav: 14,
       life: 0.95,
       team: actor.team,
-      dmg: 22,
-      splash: 30,
-      splashR: 3.1,
-      paintR: 3.15,
+      dmg: fromPlayer ? P.dmg : 22,
+      splash: fromPlayer ? P.splash : 30,
+      splashR: fromPlayer ? P.splashR : 3.1,
+      paintR: fromPlayer ? P.paintR : 3.15,
       hitR: 0.35,
-      scale: 1.7,
+      scale: fromPlayer ? 2.1 : 1.7,
       kind: "shot",
       owner: actors.indexOf(actor),
     });
-    if (fromPlayer) audio.shoot(220);
+    if (fromPlayer) {
+      shake = Math.min(0.6, shake + 0.14);
+      burst(actor.x + f.x * 0.8, actor.y + 1.25, actor.z + f.z * 0.8, actor.team, 10, 4);
+      audio.shoot(220);
+      audio.splash(0.7);
+    }
   }
 
   function shootCharger(actor: Actor, dir: THREE.Vector3, charge: number, fromPlayer: boolean) {
-    const cost = 8 + 16 * charge;
+    const P = POWER.charger;
+    const cost = fromPlayer ? P.cost[0] + P.cost[1] * charge : 8 + 16 * charge;
     if (actor.ink < cost) return;
     actor.ink -= cost;
     actor.fireCd = 0.35;
     const originY = actor.y + 1.25;
-    const maxD = 12 + charge * 30;
+    const maxD = fromPlayer ? P.reach[0] + charge * P.reach[1] : 12 + charge * 30;
     const hit = castWorld(actor.x, originY, actor.z, dir.x, dir.y, dir.z, maxD);
     const end = hit ? hit.dist : maxD;
     let victim: Actor | null = null;
@@ -1478,16 +1523,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const steps = Math.max(2, Math.floor(reach / 0.85));
     for (let s = 1; s <= steps; s++) {
       const t = (reach * s) / steps;
-      paint(actor.x + dir.x * t, actor.z + dir.z * t, 0.42 + charge * 0.35, actor.team, actor);
+      paint(actor.x + dir.x * t, actor.z + dir.z * t, fromPlayer ? P.line[0] + charge * P.line[1] : 0.42 + charge * 0.35, actor.team, actor);
     }
     if (hit && !victim) {
-      paint(hit.x, hit.z, 0.8 + charge, actor.team, actor);
+      paint(hit.x, hit.z, (fromPlayer ? 1.3 : 0.8) + charge, actor.team, actor);
       if (hit.ny < 0.65) addDecal(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + charge * 0.4, actor.team);
     }
-    if (victim) hurt(victim, 16 + 86 * charge, actor, "splat");
-    burst(actor.x + dir.x * 0.8, originY, actor.z + dir.z * 0.8, actor.team, 8, 3);
+    if (victim) hurt(victim, fromPlayer ? P.dmg[0] + P.dmg[1] * charge : 16 + 86 * charge, actor, "splat");
+    burst(actor.x + dir.x * 0.8, originY, actor.z + dir.z * 0.8, actor.team, fromPlayer ? 14 : 8, 3);
     if (fromPlayer) {
       audio.shoot(180 + charge * 520);
+      audio.splash(0.4 + charge * 0.5);
       shake = Math.min(1, shake + 0.12 + charge * 0.2);
     }
   }
@@ -1495,16 +1541,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function rollerTick(actor: Actor, dt: number, fromPlayer: boolean) {
     const f = yawForward(actor.yaw);
     if (actor.grounded && actor.ink > 0) {
-      const cost = 15 * dt;
-      actor.ink = Math.max(0, actor.ink - cost);
-      paint(actor.x + f.x * 0.7, actor.z + f.z * 0.7, 1.5, actor.team, actor);
+      const P = POWER.roller;
+      actor.ink = Math.max(0, actor.ink - (fromPlayer ? P.inkPerSec : 15) * dt);
+      paint(actor.x + f.x * 0.8, actor.z + f.z * 0.8, fromPlayer ? P.paintR : 1.5, actor.team, actor);
       const moving = Math.hypot(actor.vx, actor.vz) > 2;
       if (moving) {
+        const reach = fromPlayer ? P.reach : 1.45;
+        const dps = fromPlayer ? P.dps : 70;
         for (let i = 0; i < actors.length; i++) {
           const o = actors[i];
           if (!o.alive || o.team === actor.team || o.invuln > 0) continue;
           const d = Math.hypot(o.x - actor.x, o.z - actor.z);
-          if (d < 1.45 && o.y < actor.y + 1.2) hurt(o, 70 * dt, actor, "splat");
+          if (d < reach && o.y < actor.y + 1.2) hurt(o, dps * dt, actor, "splat");
         }
       }
     }
@@ -1515,8 +1563,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     actor.ink -= 8;
     const f = yawForward(actor.yaw);
     const r = yawRight(actor.yaw);
-    for (let i = -2; i <= 2; i++) {
-      const spread = i * 0.16;
+    const P = POWER.roller;
+    const fan = fromPlayer ? P.flicks : 2;
+    const speed = fromPlayer ? P.flickSpeed : 20;
+    for (let i = -fan; i <= fan; i++) {
+      const spread = i * (fromPlayer ? 0.14 : 0.16);
       const dx = dir.x * 0.75 + f.x * 0.25 + r.x * spread;
       const dz = dir.z * 0.75 + f.z * 0.25 + r.z * spread;
       const len = Math.hypot(dx, dz) || 1;
@@ -1524,23 +1575,27 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         x: actor.x + f.x * 0.8,
         y: actor.y + 0.7,
         z: actor.z + f.z * 0.8,
-        vx: (dx / len) * 20,
+        vx: (dx / len) * speed,
         vy: 3.5,
-        vz: (dz / len) * 20,
+        vz: (dz / len) * speed,
         grav: 12,
         life: 0.45,
         team: actor.team,
-        dmg: 16,
+        dmg: fromPlayer ? P.flickDmg : 16,
         splash: 8,
         splashR: 1.4,
-        paintR: 1.15,
+        paintR: fromPlayer ? P.flickPaint : 1.15,
         hitR: 0.3,
-        scale: 1.15,
+        scale: fromPlayer ? 1.4 : 1.15,
         kind: "flick",
         owner: actors.indexOf(actor),
       });
     }
-    if (fromPlayer) audio.shoot(280);
+    if (fromPlayer) {
+      shake = Math.min(0.6, shake + 0.12);
+      audio.shoot(280);
+      audio.splash(0.6);
+    }
   }
 
   function throwSub(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
@@ -1643,7 +1698,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     else {
       paint(x, z, p.paintR, p.team, owner);
       if (ny < 0.62) addDecal(x, y, z, nx, ny, nz, p.paintR * 0.85, p.team);
-      burst(x, y + 0.1, z, p.team, 6, 3);
+      burst(x, y + 0.1, z, p.team, Math.round(6 * p.scale), 3 * Math.max(1, p.scale * 0.8));
     }
     if (p.kind === "bomb") audio.thud();
     p.alive = false;
@@ -1664,6 +1719,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     p.y += p.vy * dt;
     p.z += p.vz * dt;
     p.life -= dt;
+    if (p.trail > 0) {
+      p.trailAcc -= dt;
+      if (p.trailAcc <= 0) {
+        p.trailAcc = 0.06;
+        paint(p.x, p.z, p.trail, p.team, actors[p.owner] ?? null, false);
+      }
+    }
     const dx = p.x - ox;
     const dy = p.y - oy;
     const dz = p.z - oz;
@@ -1716,7 +1778,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (actor.weapon === "charger") {
       if (fireHeld && actor.ink > 2) {
-        actor.charge = Math.min(1, actor.charge + dt / 0.85);
+        actor.charge = Math.min(1, actor.charge + dt / POWER.charger.fullCharge);
         actor.ink = Math.max(0, actor.ink - dt * 4);
       }
       if (fireRelease && actor.charge > 0.08) {
@@ -2373,8 +2435,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const player = actors[0];
     if (player.weapon === "charger" && player.charge > 0.02 && player.alive && mode === "play") {
       const dir = playerAim(player);
-      const hit = castWorld(player.x, player.y + 1.25, player.z, dir.x, dir.y, dir.z, 8 + player.charge * 28);
-      const dist = hit ? hit.dist : 8 + player.charge * 28;
+      const reach = POWER.charger.reach[0] + player.charge * POWER.charger.reach[1];
+      const hit = castWorld(player.x, player.y + 1.25, player.z, dir.x, dir.y, dir.z, reach);
+      const dist = hit ? hit.dist : reach;
       vA.set(player.x, player.y + 1.25, player.z);
       vB.copy(vA).addScaledVector(dir, dist);
       const mid = vA.add(vB).multiplyScalar(0.5);
@@ -2947,6 +3010,29 @@ function createAudio() {
         o.start(t0);
         o.stop(t0 + 0.22);
       });
+    },
+    /** A wet "splosh" under the player's shots; `amount` 0–1 sets weight and length. */
+    splash(amount: number) {
+      if (!ctx || !sfx || !noise || ctx.state !== "running") return;
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(2600, t);
+      lp.frequency.exponentialRampToValueAtTime(380, t + 0.06 + amount * 0.14);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.05 + amount * 0.1, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08 + amount * 0.18);
+      src.connect(lp);
+      lp.connect(g);
+      g.connect(sfx);
+      src.start(t, Math.random() * 0.6, 0.3);
+      src.onended = () => {
+        src.disconnect();
+        lp.disconnect();
+        g.disconnect();
+      };
     },
     /** Speeds the music up for the final minute. */
     setTempo(fast: boolean) {

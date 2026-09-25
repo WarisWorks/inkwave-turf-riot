@@ -54,7 +54,7 @@ type Screen = "menu" | "loadout" | "stage" | "settings" | "howto" | "credits" | 
 /** What the last match earned, shown on the results screen. */
 type Reward = { xp: number; record: boolean; levelUp: number };
 
-const VERSION = "v1.2.0";
+const VERSION = "v1.3.0";
 
 function difficultyName(id: Difficulty) {
   return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";

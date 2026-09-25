@@ -33,6 +33,19 @@ VITE_MATCH_LEN=75 npm run dev
 
 Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Tempest or Reef Rush.
 
+## Your painting gun (v1.3)
+
+The player's weapons are tuned well above the bots' copies (bots keep the base numbers, scaled by difficulty). Tuning lives in `POWER` at the top of `src/game/engine.ts`.
+
+| Weapon | Bots | Player |
+|---|---|---|
+| Spritzer | 12 dmg every 0.11 s, paint radius 0.92 | 17 dmg every 0.085 s (≈1.8× damage per second), paint radius 1.35, faster and longer shots that drip an ink trail, 22% less ink per shot |
+| Swell Roller | 70 dmg/s, paint radius 1.5, 5-drop flick | 110 dmg/s over a wider reach, paint radius 2.0, 7-drop flick at 24 dmg, 27% less ink |
+| Flint Charger | 0.85 s charge, 16–102 dmg | 0.6 s charge, 30–120 dmg (a full charge splats in one hit), longer reach, wider painted line |
+| Popper Blaster | 22 + 30 splash, every 0.72 s | 34 + 45 splash over a bigger radius, every 0.55 s, paint radius 4.0 |
+
+Shots also have a bigger muzzle burst, heavier impact splashes, a wet splash sound layer and more camera kick. The gun models carry glossy team-coloured ink tanks.
+
 ## Stages
 
 Pick a stage from **مەيدان تاللاش** in the menu; the menu backdrop switches to it live.
