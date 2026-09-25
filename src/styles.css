@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fredoka", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-sans: "Outfit", "Trebuchet MS", "Segoe UI", sans-serif;
+  --color-navy: #102033;
+  --color-navy-2: #1a3352;
+  --color-foam: #f4f7fb;
+  --color-muted: #9eb0c7;
+  --color-orange: #ff6a1a;
+  --color-violet: #5b4dff;
+  --color-sun: #ffe56a;
+  --color-sea: #128fb0;
+  --radius-sticker: 1.15rem;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body {
+    height: 100%;
+    background: var(--color-navy);
+    color: var(--color-foam);
+    font-family: var(--font-sans);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 3px solid var(--color-sun);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .sticker {
+    box-shadow: 4px 4px 0 0 var(--color-navy);
+  }
+
+  .sticker:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-navy);
+  }
+
+  .panel {
+    background: color-mix(in srgb, var(--color-navy) 88%, transparent);
+    border: 3px solid var(--color-foam);
+    border-radius: var(--radius-sticker);
+    box-shadow: 6px 6px 0 0 color-mix(in srgb, var(--color-navy) 70%, black);
+  }
+
+  .stat-track {
+    height: 0.55rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-navy) 55%, black);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticker:active:not(:disabled) {
+    transform: none;
+  }
+}
