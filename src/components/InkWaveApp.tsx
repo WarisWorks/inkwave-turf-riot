@@ -4,8 +4,10 @@ import {
   Check,
   CircleHelp,
   CloudRain,
+  Crown,
   Crosshair,
   House,
+  ListOrdered,
   Pause,
   Play,
   Radio,
@@ -13,16 +15,22 @@ import {
   ScrollText,
   Settings,
   ShowerHead,
+  Sparkles,
+  Trophy,
   Waves,
   Zap,
 } from "lucide-react";
 import type { EngineApi } from "../game/engine";
-import { DEFAULT_SAVE, loadSave, rankTitle, writeSave, type SaveData } from "../game/persist";
+import { DEFAULT_SAVE, levelInfo, loadSave, matchXp, rankTitle, writeSave, type SaveData } from "../game/persist";
 import {
+  DIFFICULTIES,
   SPECIALS,
   SUBS,
   WEAPONS,
+  mvpIndex,
   weaponById,
+  type BoardRow,
+  type Difficulty,
   type HudSnap,
   type InputState,
   type LiveConfig,
@@ -33,6 +41,15 @@ import {
 } from "../game/types";
 
 type Screen = "menu" | "loadout" | "settings" | "howto" | "credits" | "play";
+
+/** What the last match earned, shown on the results screen. */
+type Reward = { xp: number; record: boolean; levelUp: number };
+
+const VERSION = "v1.1.0";
+
+function difficultyName(id: Difficulty) {
+  return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";
+}
 
 function clock(t: number) {
   const s = Math.max(0, Math.ceil(t));
@@ -131,6 +148,7 @@ export function InkWaveApp() {
     volume: DEFAULT_SAVE.volume,
     invertY: DEFAULT_SAVE.invertY,
     quality: DEFAULT_SAVE.quality,
+    difficulty: DEFAULT_SAVE.difficulty,
     input: inputRef.current,
   });
   const onHudRef = useRef<(h: HudSnap) => void>(() => {});
@@ -142,6 +160,9 @@ export function InkWaveApp() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [hud, setHud] = useState<HudSnap | null>(null);
   const [touchUi, setTouchUi] = useState(false);
+  const [reward, setReward] = useState<Reward | null>(null);
+  const saveRef = useRef(save);
+  saveRef.current = save;
 
   configRef.current = {
     name: save.name,
@@ -152,6 +173,7 @@ export function InkWaveApp() {
     volume: save.volume,
     invertY: save.invertY,
     quality: save.quality,
+    difficulty: save.difficulty,
     input: inputRef.current,
   };
   onHudRef.current = setHud;
@@ -196,16 +218,20 @@ export function InkWaveApp() {
         onReady: () => setReady(true),
         onError: (m) => setError(m),
         onResult: (r) => {
-          setSave((current) => {
-            const next = {
-              ...current,
-              matches: current.matches + 1,
-              wins: current.wins + (r.winner === "orange" ? 1 : 0),
-              splats: current.splats + r.splats,
-            };
-            writeSave(next);
-            return next;
-          });
+          const current = saveRef.current;
+          const xp = matchXp(r);
+          const next = {
+            ...current,
+            matches: current.matches + 1,
+            wins: current.wins + (r.winner === "orange" ? 1 : 0),
+            splats: current.splats + r.splats,
+            xp: current.xp + xp,
+            best: Math.max(current.best, r.points),
+          };
+          writeSave(next);
+          setSave(next);
+          const level = levelInfo(next.xp).level;
+          setReward({ xp, record: r.points > current.best && r.points > 0, levelUp: level > levelInfo(current.xp).level ? level : 0 });
         },
         onApi: (api) => {
           apiRef.current = api;
@@ -222,6 +248,7 @@ export function InkWaveApp() {
   function play() {
     if (!apiRef.current) return;
     apiRef.current.startMatch();
+    setReward(null);
     setScreen("play");
   }
 
@@ -270,6 +297,7 @@ export function InkWaveApp() {
         <Hud
           hud={hud}
           touch={touchUi}
+          reward={reward}
           onPause={() => apiRef.current?.pause()}
           onResume={() => apiRef.current?.resume()}
           onMenu={() => {
@@ -284,10 +312,10 @@ export function InkWaveApp() {
 
       {playing ? (
         <p className="pointer-events-none absolute top-[4.6rem] left-1/2 z-40 -translate-x-1/2 rounded-full bg-navy px-2 py-0.5 font-display text-xs text-foam">
-          v1.0.0
+          {VERSION}
         </p>
       ) : (
-        <p className="pointer-events-none absolute bottom-3 left-3 z-40 rounded-full bg-navy px-2 py-1 font-display text-xs text-foam">v1.0.0</p>
+        <p className="pointer-events-none absolute bottom-3 left-3 z-40 rounded-full bg-navy px-2 py-1 font-display text-xs text-foam">{VERSION}</p>
       )}
     </div>
   );
@@ -314,10 +342,12 @@ function Menu({
     { label: "ئويناش ئۇسۇلى", screen: "howto", icon: <CircleHelp className="size-5" /> },
     { label: "ئويۇن ھەققىدە", screen: "credits", icon: <ScrollText className="size-5" /> },
   ];
+  const lv = levelInfo(save.xp);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-4 p-4 pb-10 md:flex-row md:items-center md:p-8">
         <section className="panel flex w-full flex-col gap-4 p-5 md:max-w-md">
+          <span className="ikat-strip" aria-hidden />
           <div className="flex items-center gap-3">
             <span className="relative h-14 w-14 shrink-0" aria-hidden>
               <span className="absolute inset-0 rounded-full bg-orange" />
@@ -348,7 +378,7 @@ function Menu({
               {ready ? (
                 <>
                   باشلاش
-                  <span className="ink-chip ms-auto">زېمىن جېڭى · 4 گە 4</span>
+                  <span className="ink-chip ms-auto">4 گە 4 · {difficultyName(save.difficulty)}</span>
                 </>
               ) : (
                 <span className="text-lg">دولقۇن ئويغىنىۋاتىدۇ…</span>
@@ -376,6 +406,17 @@ function Menu({
             className="mt-1 h-12 w-full rounded-sticker border-2 border-foam bg-navy-2 px-3 font-display text-xl text-foam"
           />
           <p className="mt-4 font-display text-2xl text-orange">{rankTitle(save.wins)}</p>
+          <div className="mt-2">
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="font-display text-lg text-sun">دەرىجە {lv.level}</span>
+              <span className="text-muted" dir="ltr">
+                {lv.into} / {lv.need}
+              </span>
+            </div>
+            <span className="ink-xp mt-1" role="progressbar" aria-label="تەجرىبە" aria-valuenow={lv.into} aria-valuemax={lv.need}>
+              <span style={{ width: `${(lv.into / lv.need) * 100}%` }} />
+            </span>
+          </div>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
               <dt className="text-muted">غەلىبە</dt>
@@ -390,8 +431,16 @@ function Menu({
               <dd className="font-display text-xl">{save.splats}</dd>
             </div>
             <div>
+              <dt className="text-muted">ئەڭ ياخشى نومۇر</dt>
+              <dd className="font-display text-xl">{save.best}</dd>
+            </div>
+            <div>
               <dt className="text-muted">قورال</dt>
               <dd className="font-display text-xl">{weapon}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">رەقىب</dt>
+              <dd className="font-display text-xl">{difficultyName(save.difficulty)}</dd>
             </div>
           </dl>
           <p className="mt-4 text-sm leading-ug text-muted">ئاپېلسىن گۇرۇپپا · 3 مىنۇتلۇق پورت مۇسابىقىسى</p>
@@ -501,6 +550,23 @@ function SettingsScreen({ save, onBack, onChange }: { save: SaveData; onBack: ()
             <input type="range" min={0} max={1} step={0.01} value={save.volume} onChange={(e) => onChange({ volume: Number(e.target.value) })} />
           </label>
           <div className="flex flex-col gap-2 text-base">
+            رەقىب قىيىنلىقى
+            <div className="grid grid-cols-3 gap-3">
+              {DIFFICULTIES.map((d) => (
+                <InkOption
+                  key={d.id}
+                  tone="violet"
+                  selected={save.difficulty === d.id}
+                  className="h-12 text-center font-display text-lg"
+                  onClick={() => onChange({ difficulty: d.id })}
+                >
+                  {d.name}
+                </InkOption>
+              ))}
+            </div>
+            <p className="text-sm leading-ug text-muted">پەقەت بىنەپشە گۇرۇپپىغا تەسىر قىلىدۇ؛ سەپداشلىرىڭىز ئۆزگەرمەيدۇ.</p>
+          </div>
+          <div className="flex flex-col gap-2 text-base">
             گرافىكا
             <div className="grid grid-cols-2 gap-3">
               {(["low", "high"] as Quality[]).map((q) => (
@@ -524,6 +590,7 @@ function HowTo({ onBack }: { onBack: () => void }) {
     { title: "سەكرەش", keys: ["Space"], text: "دومىلىتىۋاتقاندا سەكرىسىڭىز، چاچرىتىش تېخىمۇ يىراققا ئۇچىدۇ." },
     { title: "ئۈزۈش", keys: ["Shift"], text: "ئۆز سىياھىڭىزدا بېسىپ تۇرسىڭىز، تېز ئۈزۈپ سىياھ تولۇقلايسىز. رەقىب سىياھى سىزنى ئاستىلىتىدۇ ۋە بويايدۇ." },
     { title: "قوشۇمچە / ئالاھىدە", keys: ["ئوڭ چېكىش", "C", "F"], text: "قوشۇمچە قورال ئۈچۈن ئوڭ چېكىش ياكى C. ئالاھىدە ماھارەت ئۆلچىگۈچى تولغاندا F نى بېسىڭ." },
+    { title: "نەتىجە تاختىسى", keys: ["Tab"], text: "مۇسابىقە جەريانىدا Tab نى بېسىپ تۇرسىڭىز، ھەممە ئويۇنچىنىڭ بوياش نومۇرى ۋە چاچرىتىشلىرى كۆرۈنىدۇ." },
     { title: "چاچرىتىلىش", keys: [], text: "ساغلاملىق بالدىقى يوق. پۈتۈنلەي سىياھقا بويالسىڭىز، بازىدا قايتا پەيدا بولىسىز." },
     { title: "غەلىبە", keys: [], text: "ئۈچ مىنۇت توشقاندا پورتنىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
   ];
@@ -567,9 +634,59 @@ function Credits({ onBack }: { onBack: () => void }) {
             دولقۇنچاقلار، پورت ۋە بارلىق قوراللار ئەسلىي ئىجادىيەت. Nintendo نىڭ ھېچقانداق پېرسوناژى، ئىسمى ياكى ماتېرىيالى ئىشلىتىلمىدى. شەكىل، سىياھ ۋە
             ئاۋازلارنىڭ ھەممىسى توركۆرگۈچتە ھاسىل قىلىنىدۇ.
           </p>
-          <p className="mt-4 font-display text-sm text-sun">v1.0.0</p>
+          <p className="mt-4 font-display text-sm text-sun">{VERSION}</p>
         </section>
       </div>
+    </div>
+  );
+}
+
+function TeamTable({ board, team, pct, mvp }: { board: BoardRow[]; team: "orange" | "violet"; pct: number; mvp: number }) {
+  const rows = board.map((r, idx) => ({ ...r, idx })).filter((r) => r.team === team).sort((a, b) => b.points - a.points);
+  const tone = team === "orange" ? "text-orange" : "text-violet";
+  return (
+    <div className={`board-team board-${team}`}>
+      <div className="flex items-baseline justify-between px-2">
+        <p className={`font-display text-lg ${tone}`}>{team === "orange" ? "ئاپېلسىن" : "بىنەپشە"}</p>
+        <p className={`font-display text-2xl ${tone}`}>{Math.round(pct * 100)}%</p>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="text-muted">
+          <tr>
+            <th className="px-2 text-start font-normal">ئويۇنچى</th>
+            <th className="px-1 font-normal">نومۇر</th>
+            <th className="px-1 font-normal">چاچرىتىش</th>
+            <th className="px-1 font-normal">يۇيۇلۇش</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.idx} className={`${r.isPlayer ? "board-me" : ""} ${r.alive ? "" : "opacity-55"}`}>
+              <td className="px-2 py-1">
+                <span className="flex items-center gap-1.5 font-display text-base leading-7">
+                  {r.idx === mvp ? <Crown className="size-4 shrink-0 text-sun" aria-label="ئەڭ ياخشى ئويۇنچى" /> : null}
+                  {r.name}
+                  {r.isPlayer ? <span className="text-xs text-sun">(سىز)</span> : null}
+                </span>
+                <span className="block text-xs leading-5 text-muted">{weaponById(r.weapon).name}</span>
+              </td>
+              <td className="px-1 text-center font-display text-base">{r.points}</td>
+              <td className="px-1 text-center font-display text-base">{r.splats}</td>
+              <td className="px-1 text-center font-display text-base">{r.deaths}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Scoreboard({ board, orange, blue }: { board: BoardRow[]; orange: number; blue: number }) {
+  const mvp = mvpIndex(board);
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <TeamTable board={board} team="orange" pct={orange} mvp={mvp} />
+      <TeamTable board={board} team="violet" pct={blue} mvp={mvp} />
     </div>
   );
 }
@@ -577,6 +694,7 @@ function Credits({ onBack }: { onBack: () => void }) {
 function Hud({
   hud,
   touch,
+  reward,
   onPause,
   onResume,
   onMenu,
@@ -584,13 +702,40 @@ function Hud({
 }: {
   hud: HudSnap;
   touch: boolean;
+  reward: Reward | null;
   onPause: () => void;
   onResume: () => void;
   onMenu: () => void;
   onAgain: () => void;
 }) {
+  const [boardOpen, setBoardOpen] = useState(false);
+  // Only hijack Tab during live play so it still moves focus on the pause and results screens.
+  const inPlayRef = useRef(false);
+  inPlayRef.current = hud.phase !== "ended" && !hud.paused;
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== "Tab" || !inPlayRef.current) return;
+      e.preventDefault();
+      setBoardOpen(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Tab") setBoardOpen(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
   const subName = SUBS.find((s) => s.id === hud.sub)?.name ?? "قوشۇمچە";
   const spName = SPECIALS.find((s) => s.id === hud.specialId)?.name ?? "ئالاھىدە";
+  const live = hud.phase === "live" && !hud.paused;
+  const finalCount = live && hud.time <= 10;
+  const lowInk = live && hud.respawn <= 0 && hud.ink < 0.15 && !hud.swimming;
+  const specialReady = hud.special >= 1 && hud.respawn <= 0;
+  const showBoard = boardOpen && hud.phase !== "ended" && !hud.paused;
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       <div
@@ -607,10 +752,16 @@ function Hud({
           <p className="font-display text-2xl leading-8">{Math.round(hud.orange * 100)}%</p>
         </div>
         <div className="flex flex-col items-center">
-          <p className="font-display text-3xl text-foam">{clock(hud.time)}</p>
+          <p
+            className={`font-display text-3xl transition-transform ${
+              finalCount ? "clock-final scale-125 text-orange" : live && hud.time <= 60 ? "text-sun" : "text-foam"
+            }`}
+          >
+            {clock(hud.time)}
+          </p>
           <div className="mt-1 flex h-3 w-40 overflow-hidden rounded-full bg-navy md:w-64">
-            <span className="bg-orange" style={{ width: `${hud.orange * 100}%` }} />
-            <span className="ms-auto bg-violet" style={{ width: `${hud.blue * 100}%` }} />
+            <span className="bg-orange transition-[width] duration-300" style={{ width: `${hud.orange * 100}%` }} />
+            <span className="ms-auto bg-violet transition-[width] duration-300" style={{ width: `${hud.blue * 100}%` }} />
           </div>
         </div>
         <div className="rounded-sticker bg-navy/80 px-3 py-1 text-end">
@@ -619,13 +770,21 @@ function Hud({
         </div>
       </div>
 
-      <InkButton
-        className="pointer-events-auto absolute top-20 right-3 h-11 ps-1.5 pe-3 text-base"
-        icon={<Pause className="size-4" />}
-        onClick={onPause}
-      >
-        توختىتىش
-      </InkButton>
+      <div className="pointer-events-auto absolute top-20 right-3 flex flex-col items-end gap-4">
+        <InkButton className="h-11 ps-1.5 pe-3 text-base" icon={<Pause className="size-4" />} onClick={onPause}>
+          توختىتىش
+        </InkButton>
+        {touch ? (
+          <InkButton
+            className="h-11 ps-1.5 pe-3 text-base"
+            icon={<ListOrdered className="size-4" />}
+            aria-pressed={boardOpen}
+            onClick={() => setBoardOpen((v) => !v)}
+          >
+            نەتىجە
+          </InkButton>
+        ) : null}
+      </div>
 
       <div className="absolute top-24 left-3 flex max-w-xs flex-col gap-1">
         {hud.feed.map((line) => (
@@ -636,11 +795,17 @@ function Hud({
       </div>
 
       {hud.banner ? (
-        <p className="absolute top-1/3 left-1/2 -translate-x-1/2 font-display text-5xl whitespace-nowrap text-sun md:text-6xl">{hud.banner}</p>
+        <p key={hud.banner} className="hud-banner absolute top-1/3 left-1/2 -translate-x-1/2 font-display text-5xl whitespace-nowrap text-sun md:text-6xl">{hud.banner}</p>
       ) : null}
 
       {hud.countdown > 0 && hud.phase !== "ended" ? (
         <p className="absolute top-[42%] left-1/2 -translate-x-1/2 font-display text-7xl text-foam">{Math.ceil(hud.countdown)}</p>
+      ) : null}
+
+      {finalCount ? (
+        <p className="final-count absolute top-[18%] left-1/2 -translate-x-1/2 font-display text-8xl text-orange" key={Math.ceil(hud.time)}>
+          {Math.ceil(hud.time)}
+        </p>
       ) : null}
 
       {hud.respawn > 0 ? (
@@ -659,9 +824,27 @@ function Hud({
           className="absolute inset-0 rounded-full border-2 border-orange"
           style={{ opacity: hud.charging, transform: `scale(${0.6 + hud.charging})` }}
         />
+        <span className="hit-mark" style={{ opacity: hud.hit, transform: `rotate(45deg) scale(${1.25 - hud.hit * 0.25})` }} aria-hidden>
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="kill-splat" style={{ opacity: hud.kill, transform: `scale(${2.6 - hud.kill * 1.2}) rotate(${hud.kill * 40}deg)` }} aria-hidden />
       </div>
 
+      {lowInk ? (
+        <p className="low-ink absolute top-[calc(50%+2.4rem)] left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-navy/85 px-3 py-0.5 text-sm whitespace-nowrap text-orange">
+          سىياھ ئاز —{touch ? null : <Kbd>Shift</Kbd>}ئۈزۈپ تولۇقلاڭ
+        </p>
+      ) : null}
+
       <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72`}>
+        {specialReady ? (
+          <p className="special-ready-tag mb-2 flex items-center gap-1.5 rounded-full bg-violet px-3 text-sm text-foam">
+            <Sparkles className="size-4" /> {spName} تەييار{touch ? null : <Kbd>F</Kbd>}
+          </p>
+        ) : null}
         <div className="mb-2 flex items-center gap-2 text-sm whitespace-nowrap text-foam">
           <span>{weaponById(hud.weapon).name}</span>
           <span className="text-muted">·</span>
@@ -670,10 +853,10 @@ function Hud({
           <span className={hud.special >= 1 ? "text-sun" : "text-muted"}>{spName}</span>
         </div>
         <div className="flex items-end gap-2">
-          <div className="h-16 w-5 overflow-hidden rounded-full border-2 border-foam bg-navy">
+          <div className={`h-16 w-5 overflow-hidden rounded-full border-2 bg-navy ${lowInk ? "ink-low border-orange" : "border-foam"}`}>
             <div className="w-full bg-orange" style={{ height: `${hud.ink * 100}%`, marginTop: `${(1 - hud.ink) * 100}%` }} />
           </div>
-          <div className="h-10 w-24 overflow-hidden rounded-full border-2 border-foam bg-navy">
+          <div className={`h-10 w-24 overflow-hidden rounded-full border-2 border-foam bg-navy ${specialReady ? "special-ready" : ""}`}>
             <div className="h-full bg-violet" style={{ width: `${hud.special * 100}%` }} />
           </div>
         </div>
@@ -683,6 +866,7 @@ function Hud({
               ["Shift", "ئۈزۈش"],
               ["ئوڭ چېكىش", "قوشۇمچە"],
               ["F", "ئالاھىدە"],
+              ["Tab", "نەتىجە"],
             ].map(([key, action]) => (
               <span key={key} className="flex items-center gap-1.5 whitespace-nowrap">
                 <Kbd>{key}</Kbd>
@@ -692,6 +876,17 @@ function Hud({
           </p>
         ) : null}
       </div>
+
+      {showBoard ? (
+        <div
+          className={`absolute inset-x-3 top-24 mx-auto max-w-3xl ${touch ? "pointer-events-auto" : ""}`}
+          onClick={touch ? () => setBoardOpen(false) : undefined}
+        >
+          <div className="panel max-h-[70vh] overflow-y-auto p-4">
+            <Scoreboard board={hud.board} orange={hud.orange} blue={hud.blue} />
+          </div>
+        </div>
+      ) : null}
 
       {hud.paused ? (
         <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-navy/70 p-4">
@@ -708,25 +903,47 @@ function Hud({
       ) : null}
 
       {hud.phase === "ended" && hud.result ? (
-        <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-navy/72 p-4">
-          <div className="panel w-full max-w-md p-6 pb-9 text-center">
-            <p className="font-display text-base text-sun">مۇسابىقە ئاخىرلاشتى</p>
-            <h2 className="mt-1 font-display text-4xl leading-[1.5]">
-              {hud.result.winner === "orange"
-                ? "ئاپېلسىن گۇرۇپپا زېمىننى ئالدى"
-                : hud.result.winner === "violet"
-                  ? "بىنەپشە گۇرۇپپا زېمىننى ئالدى"
-                  : "تەڭ-تەڭ"}
-            </h2>
-            <p className="mt-3 font-display text-3xl">
-              <span className="text-orange">{Math.round(hud.result.orange * 100)}%</span>
-              <span className="text-muted"> · </span>
-              <span className="text-violet">{Math.round(hud.result.blue * 100)}%</span>
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              سىز {hud.result.splats} رەقىبنى چاچرىتتىڭىز · {hud.result.deaths} قېتىم يۇيۇلدىڭىز
-            </p>
-            <div className="mt-5 flex flex-col gap-5">
+        <div className="pointer-events-auto absolute inset-0 flex items-center justify-center overflow-y-auto bg-navy/72 p-4">
+          <div className="panel my-auto w-full max-w-3xl p-5 pb-9 md:p-6 md:pb-9">
+            <span className="ikat-strip" aria-hidden />
+            <div className="mt-3 text-center">
+              <p className="font-display text-base text-sun">مۇسابىقە ئاخىرلاشتى</p>
+              <h2 className="mt-1 font-display text-4xl leading-[1.5]">
+                {hud.result.winner === "orange"
+                  ? "ئاپېلسىن گۇرۇپپا زېمىننى ئالدى"
+                  : hud.result.winner === "violet"
+                    ? "بىنەپشە گۇرۇپپا زېمىننى ئالدى"
+                    : "تەڭ-تەڭ"}
+              </h2>
+              <div className="result-bar mx-auto mt-3 max-w-md">
+                <span className="bg-orange" style={{ width: `${hud.result.orange * 100}%` }} />
+                <span className="ms-auto bg-violet" style={{ width: `${hud.result.blue * 100}%` }} />
+              </div>
+              <p className="mt-2 text-sm text-muted">
+                سىز {hud.result.points} نومۇر بويىدىڭىز · {hud.result.splats} رەقىبنى چاچرىتتىڭىز · {hud.result.deaths} قېتىم يۇيۇلدىڭىز
+              </p>
+              {reward ? (
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
+                  <span className="reward-chip ink-orange">
+                    <Sparkles className="size-4" /> <span dir="ltr">+{reward.xp}</span> تەجرىبە
+                  </span>
+                  {reward.levelUp ? (
+                    <span className="reward-chip ink-violet">
+                      <Crown className="size-4" /> دەرىجە {reward.levelUp} گە ئۆستىڭىز!
+                    </span>
+                  ) : null}
+                  {reward.record ? (
+                    <span className="reward-chip ink-foam">
+                      <Trophy className="size-4" /> يېڭى رېكورت!
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-5">
+              <Scoreboard board={hud.result.board} orange={hud.result.orange} blue={hud.result.blue} />
+            </div>
+            <div className="mx-auto mt-6 flex max-w-md flex-col gap-5">
               <InkButton tone="orange" className="h-12 ps-1.5 pe-4 text-lg" icon={<RotateCcw className="size-4" />} onClick={onAgain}>
                 يەنە ئويناش
               </InkButton>

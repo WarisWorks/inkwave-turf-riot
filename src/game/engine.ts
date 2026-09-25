@@ -1,13 +1,14 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { HudSnap, InputState, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
+import type { BoardRow, Difficulty, HudSnap, InputState, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
 
 const MAP = { minX: -30, minZ: -38, w: 60, d: 76 };
 const GW = 120;
 const GH = 152;
 const TW = 480;
 const TH = 608;
-const MATCH_LEN = 180;
+// Match length in seconds; VITE_MATCH_LEN shortens it for local testing.
+const MATCH_LEN = Number(import.meta.env.VITE_MATCH_LEN) || 180;
 const GRAV = 22;
 const STEP = 1 / 60;
 
@@ -25,6 +26,14 @@ const SPAWN_V: [number, number][] = [
 ];
 
 type Team = 1 | 2;
+
+/** Bot tuning. Only the Violet side scales with difficulty; teammates always play "normal". */
+type Tune = { speed: number; cd: number; spread: number; range: number; think: number; dmg: number; meter: number };
+const TUNE: Record<Difficulty, Tune> = {
+  easy: { speed: 0.86, cd: 1.5, spread: 2.4, range: 0.75, think: 1.6, dmg: 0.7, meter: 0.45 },
+  normal: { speed: 1, cd: 1, spread: 1, range: 1, think: 1, dmg: 1, meter: 0.7 },
+  hard: { speed: 1.08, cd: 0.78, spread: 0.55, range: 1.2, think: 0.7, dmg: 1.15, meter: 0.9 },
+};
 type Box = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 
 type Kid = {
@@ -73,6 +82,8 @@ type Actor = {
   grounded: boolean;
   splats: number;
   deaths: number;
+  /** Grid cells this actor flipped to its own color this match. */
+  painted: number;
   rush: number;
   stuck: number;
   mesh: Kid;
@@ -100,8 +111,8 @@ type Proj = {
   owner: number;
 };
 
-type Zone = { alive: boolean; x: number; z: number; team: Team; life: number; acc: number; r: number; mesh: THREE.Group };
-type Beacon = { alive: boolean; x: number; y: number; z: number; team: Team; life: number; acc: number; mesh: THREE.Mesh };
+type Zone = { alive: boolean; x: number; z: number; team: Team; owner: number; life: number; acc: number; r: number; mesh: THREE.Group };
+type Beacon = { alive: boolean; x: number; y: number; z: number; team: Team; owner: number; life: number; acc: number; mesh: THREE.Mesh };
 
 export type EngineApi = {
   startMatch: () => void;
@@ -179,6 +190,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let banner = "";
   let bannerT = 0;
   let shake = 0;
+  let hitMark = 0;
+  let killMark = 0;
   let orbitAng = 0.4;
   let hudAcc = 0;
   let miniAcc = 0;
@@ -447,6 +460,94 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     clouds.push(c);
   }
 
+  // Etles (ئەتلەس) ikat banners: vertical color bands and diamond motifs whose rows are
+  // nudged sideways, like the feathered edges of resist-dyed Uyghur silk.
+  function makeEtles(seed: number) {
+    const r = mulberry32(seed);
+    const W = 128;
+    const H = 256;
+    const ROW = 2;
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const g = c.getContext("2d")!;
+    const palettes = [
+      ["#c8102e", "#ffc81e", "#10813f", "#1c3597", "#161616", "#f5efe0"],
+      ["#d8337f", "#ffd23f", "#16957a", "#2447b0", "#1a1a1a", "#fff4e0"],
+      ["#b3122e", "#f7b500", "#6b2fa0", "#0d7894", "#121212", "#f2ead8"],
+    ];
+    const pal = palettes[seed % palettes.length];
+    const pick = (not?: string) => {
+      let col = pal[Math.floor(r() * pal.length)];
+      while (col === not) col = pal[Math.floor(r() * pal.length)];
+      return col;
+    };
+    const bands: { x: number; w: number; col: string; motif: string; period: number; shift: number }[] = [];
+    for (let x = 0; x < W; ) {
+      const w = Math.min(W - x, 14 + Math.floor(r() * 26));
+      const col = pick(bands[bands.length - 1]?.col);
+      bands.push({ x, w, col, motif: pick(col), period: r() > 0.5 ? 64 : 32, shift: Math.floor(r() * 32) });
+      x += w;
+    }
+    const jit = () => (r() - 0.5) * 3.2;
+    for (let y = 0; y < H; y += ROW) {
+      for (const b of bands) {
+        g.fillStyle = b.col;
+        g.fillRect(b.x + (b.x ? jit() : 0), y, W - b.x + 4, ROW);
+      }
+      for (const b of bands) {
+        if (b.w < 16) continue;
+        const t = ((y + b.shift) % b.period) / b.period;
+        const hw = b.w * 0.42 * (1 - Math.abs(t * 2 - 1));
+        const cx = b.x + b.w / 2 + jit();
+        g.fillStyle = b.motif;
+        g.fillRect(cx - hw, y, hw * 2, ROW);
+        if (hw > 4) {
+          g.fillStyle = b.col;
+          g.fillRect(cx - hw * 0.4, y, hw * 0.8, ROW);
+        }
+      }
+    }
+    // Zig-zag hem along the bottom.
+    g.globalCompositeOperation = "destination-out";
+    g.beginPath();
+    for (let x = 0; x <= W; x += 16) {
+      g.moveTo(x, H);
+      g.lineTo(x + 8, H - 14);
+      g.lineTo(x + 16, H);
+    }
+    g.fill();
+    g.globalCompositeOperation = "source-over";
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  const etles = [0, 1, 2].map((i) => new THREE.MeshLambertMaterial({ map: makeEtles(i), transparent: true, alphaTest: 0.5 }));
+  const bannerGeo = new THREE.PlaneGeometry(1.8, 3.6);
+  const rodGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6);
+  rodGeo.rotateZ(Math.PI / 2);
+  const rodMat = new THREE.MeshLambertMaterial({ color: 0x6b4226 });
+  const hangBanner = (x: number, z: number, rotY: number, i: number) => {
+    const g = new THREE.Group();
+    const cloth = new THREE.Mesh(bannerGeo, etles[i % etles.length]);
+    cloth.position.y = 2.3;
+    const rod = new THREE.Mesh(rodGeo, rodMat);
+    rod.position.set(0, 4.12, 0.03);
+    g.add(cloth, rod);
+    g.position.set(x, 0, z);
+    g.rotation.y = rotY;
+    scene.add(g);
+  };
+  [-30, -19, 16, 31].forEach((z, i) => {
+    hangBanner(-30.45, z, Math.PI / 2, i);
+    hangBanner(30.45, z, -Math.PI / 2, i + 1);
+  });
+  hangBanner(-18, -38.45, 0, 2);
+  hangBanner(16, -38.45, 0, 0);
+  hangBanner(-16, 38.45, Math.PI, 1);
+  hangBanner(20, 38.45, Math.PI, 2);
+
   function standHeight(x: number, z: number, feetY: number) {
     let h = 0;
     for (let i = 0; i < solids.length; i++) {
@@ -476,7 +577,12 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   let paintDirty = false;
-  function paint(x: number, z: number, radius: number, team: Team, fromPlayer = false) {
+  function tuneFor(a: Actor): Tune {
+    return a.team === 2 ? TUNE[bridge.config.current.difficulty] ?? TUNE.normal : TUNE.normal;
+  }
+
+  /** `by` earns turf points for newly flipped cells; `meter` also charges its special. */
+  function paint(x: number, z: number, radius: number, team: Team, by: Actor | null = null, meter = true) {
     const u = (x - MAP.minX) / MAP.w;
     const v = (z - MAP.minZ) / MAP.d;
     if (u < -0.05 || v < -0.05 || u > 1.05 || v > 1.05) return;
@@ -490,6 +596,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const gz = Math.floor(v * GH);
     const gr = Math.ceil(radius * (GW / MAP.w)) + 1;
     const r2 = radius * radius;
+    let flipped = 0;
     for (let iz = gz - gr; iz <= gz + gr; iz++) {
       if (iz < 0 || iz >= GH) continue;
       for (let ix = gx - gr; ix <= gx + gr; ix++) {
@@ -500,12 +607,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         const wz = MAP.minZ + ((iz + 0.5) / GH) * MAP.d;
         const dx = wx - x;
         const dz = wz - z;
-        if (dx * dx + dz * dz <= r2) grid[i] = team;
+        if (dx * dx + dz * dz <= r2) {
+          if (grid[i] !== team) flipped++;
+          grid[i] = team;
+        }
       }
     }
-    if (fromPlayer) {
-      const p = actors[0];
-      if (p) p.special = Math.min(100, p.special + radius * 0.11);
+    if (by && by.team === team) {
+      by.painted += flipped;
+      if (meter) by.special = Math.min(100, by.special + radius * 0.11 * (by.isPlayer ? 1 : tuneFor(by).meter));
     }
   }
   function teamAt(x: number, z: number): number {
@@ -731,6 +841,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       grounded: true,
       splats: 0,
       deaths: 0,
+      painted: 0,
       rush: 0,
       stuck: 0,
       mesh: makeKid(team, name),
@@ -870,7 +981,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     scene.add(g);
     return g;
   }
-  for (let i = 0; i < 3; i++) zones.push({ alive: false, x: 0, z: 0, team: 1, life: 0, acc: 0, r: 6.5, mesh: makeCloud() });
+  for (let i = 0; i < 3; i++) zones.push({ alive: false, x: 0, z: 0, team: 1, owner: 0, life: 0, acc: 0, r: 6.5, mesh: makeCloud() });
   const beaconGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
   const beaconMat = {
     1: new THREE.MeshLambertMaterial({ color: 0xff6a1a }),
@@ -880,7 +991,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const mesh = new THREE.Mesh(beaconGeo, beaconMat[1]);
     mesh.visible = false;
     scene.add(mesh);
-    beacons.push({ alive: false, x: 0, y: 0, z: 0, team: 1, life: 0, acc: 0, mesh });
+    beacons.push({ alive: false, x: 0, y: 0, z: 0, team: 1, owner: 0, life: 0, acc: 0, mesh });
   }
 
   const laser = new THREE.Mesh(
@@ -1017,7 +1128,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   function splashAt(x: number, y: number, z: number, team: Team, paintR: number, dmg: number, splashR: number, owner: Actor | null) {
-    paint(x, z, paintR, team, !!owner?.isPlayer);
+    paint(x, z, paintR, team, owner);
     burst(x, y + 0.2, z, team, 16, 6);
     if (dmg <= 0) return;
     for (let i = 0; i < actors.length; i++) {
@@ -1033,6 +1144,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function hurt(target: Actor, amount: number, by: Actor | null, how: "splat" | "water") {
     if (!target.alive || (how === "splat" && target.invuln > 0)) return;
+    if (target.isPlayer && by && !by.isPlayer) amount *= tuneFor(by).dmg;
+    if (by?.isPlayer && !target.isPlayer && amount > 0) {
+      if (hitMark < 0.55) audio.hit();
+      hitMark = 1;
+    }
     if (how === "water") target.splat = 100;
     else target.splat = Math.min(100, target.splat + amount);
     if (target.splat < 100) return;
@@ -1042,7 +1158,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     target.swimming = false;
     target.mesh.root.visible = false;
     burst(target.x, target.y + 0.8, target.z, by?.team ?? (target.team === 1 ? 2 : 1), 28, 7);
-    paint(target.x, target.z, 2.3, by?.team ?? (target.team === 1 ? 2 : 1), !!by?.isPlayer);
+    paint(target.x, target.z, 2.3, by?.team ?? (target.team === 1 ? 2 : 1), by);
     shake = Math.min(1, shake + (target.isPlayer || by?.isPlayer ? 0.7 : 0.25));
     audio.thud();
     if (how === "water") {
@@ -1050,8 +1166,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (target.isPlayer) setBanner("سۇغا چۈشتىڭىز!");
     } else if (by) {
       by.splats += 1;
+      by.special = Math.min(100, by.special + 28 * (by.isPlayer ? 1 : tuneFor(by).meter));
       if (by.isPlayer) {
-        by.special = Math.min(100, by.special + 28);
+        killMark = 1;
         setBanner("پاكىز زەربە!");
       }
       if (target.isPlayer) setBanner("چاچرىتىلدىڭىز!");
@@ -1079,7 +1196,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function shootSpritzer(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
     if (actor.ink < 1.1 || actor.fireCd > 0) return;
     actor.ink -= 1.15;
-    actor.fireCd = fromPlayer ? 0.11 : 0.2;
+    actor.fireCd = fromPlayer ? 0.11 : 0.2 * tuneFor(actor).cd;
     const f = yawForward(actor.yaw);
     spawnProj({
       x: actor.x + f.x * 0.55,
@@ -1110,7 +1227,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function shootBlaster(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
     if (actor.ink < 14 || actor.fireCd > 0) return;
     actor.ink -= 14;
-    actor.fireCd = fromPlayer ? 0.72 : 1.05;
+    actor.fireCd = fromPlayer ? 0.72 : 1.05 * tuneFor(actor).cd;
     const f = yawForward(actor.yaw);
     spawnProj({
       x: actor.x + f.x * 0.6,
@@ -1175,10 +1292,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const steps = Math.max(2, Math.floor(reach / 0.85));
     for (let s = 1; s <= steps; s++) {
       const t = (reach * s) / steps;
-      paint(actor.x + dir.x * t, actor.z + dir.z * t, 0.42 + charge * 0.35, actor.team, fromPlayer);
+      paint(actor.x + dir.x * t, actor.z + dir.z * t, 0.42 + charge * 0.35, actor.team, actor);
     }
     if (hit && !victim) {
-      paint(hit.x, hit.z, 0.8 + charge, actor.team, fromPlayer);
+      paint(hit.x, hit.z, 0.8 + charge, actor.team, actor);
       if (hit.ny < 0.65) addDecal(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + charge * 0.4, actor.team);
     }
     if (victim) hurt(victim, 16 + 86 * charge, actor, "splat");
@@ -1194,7 +1311,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (actor.grounded && actor.ink > 0) {
       const cost = 15 * dt;
       actor.ink = Math.max(0, actor.ink - cost);
-      paint(actor.x + f.x * 0.7, actor.z + f.z * 0.7, 1.5, actor.team, fromPlayer);
+      paint(actor.x + f.x * 0.7, actor.z + f.z * 0.7, 1.5, actor.team, actor);
       const moving = Math.hypot(actor.vx, actor.vz) > 2;
       if (moving) {
         for (let i = 0; i < actors.length; i++) {
@@ -1273,7 +1390,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     actor.special = 0;
     if (actor.specialId === "reef-rush") {
       actor.rush = 6;
-      setBanner(actor.isPlayer ? "مەرجان يۈگۈرۈشى" : "");
+      if (actor.isPlayer) setBanner("مەرجان يۈگۈرۈشى");
+      else pushFeed(`${actor.name} — مەرجان يۈگۈرۈشى!`);
       audio.chime();
       return;
     }
@@ -1285,6 +1403,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     zone.x = x;
     zone.z = z;
     zone.team = actor.team;
+    zone.owner = actors.indexOf(actor);
     zone.life = 5.6;
     zone.acc = 0;
     zone.mesh.visible = true;
@@ -1297,16 +1416,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (actor.isPlayer) {
       setBanner("سىياھ بورىنى");
       audio.chime();
-    }
+    } else pushFeed(`${actor.name} — سىياھ بورىنى!`);
   }
 
-  function placeBeacon(x: number, y: number, z: number, team: Team) {
+  function placeBeacon(x: number, y: number, z: number, team: Team, owner: number) {
     const b = beacons.find((k) => !k.alive) ?? beacons[0];
     b.alive = true;
     b.x = x;
     b.y = y;
     b.z = z;
     b.team = team;
+    b.owner = owner;
     b.life = 4.2;
     b.acc = 0;
     b.mesh.visible = true;
@@ -1328,14 +1448,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     }
     if (p.kind === "beacon") {
-      placeBeacon(x, y, z, p.team);
-      paint(x, z, p.paintR, p.team, !!owner?.isPlayer);
+      placeBeacon(x, y, z, p.team, p.owner);
+      paint(x, z, p.paintR, p.team, owner);
       p.alive = false;
       return;
     }
     if (p.splash > 0 || p.kind === "bomb") splashAt(x, y, z, p.team, p.paintR, p.kind === "bomb" ? p.splash : p.splash, p.splashR, owner);
     else {
-      paint(x, z, p.paintR, p.team, !!owner?.isPlayer);
+      paint(x, z, p.paintR, p.team, owner);
       if (ny < 0.62) addDecal(x, y, z, nx, ny, nz, p.paintR * 0.85, p.team);
       burst(x, y + 0.1, z, p.team, 6, 3);
     }
@@ -1369,7 +1489,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if ((a.x - p.x) ** 2 + (cy - p.y) ** 2 + (a.z - p.z) ** 2 < (0.42 + p.hitR) ** 2) {
         const owner = actors[p.owner] ?? null;
         if (p.dmg > 0) hurt(a, p.dmg, owner, "splat");
-        paint(a.x, a.z, Math.max(0.7, p.paintR * 0.55), p.team, !!owner?.isPlayer);
+        paint(a.x, a.z, Math.max(0.7, p.paintR * 0.55), p.team, owner);
         if (p.splash > 0 || p.kind === "bomb") splashAt(p.x, p.y, p.z, p.team, p.paintR, p.splash, p.splashR, owner);
         else burst(p.x, p.y, p.z, p.team, 8, 4);
         p.alive = false;
@@ -1384,7 +1504,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (p.y < -2 || p.life <= 0) {
       if (p.kind === "shot" && p.splash > 0) splashAt(p.x, Math.max(0.2, p.y), p.z, p.team, p.paintR, p.splash, p.splashR, actors[p.owner] ?? null);
       else if (p.life <= 0 && p.kind === "bomb") impactProj(p, p.x, p.y, p.z, 0, 1, 0);
-      else paint(p.x, p.z, p.paintR * 0.6, p.team, !!(actors[p.owner]?.isPlayer));
+      else paint(p.x, p.z, p.paintR * 0.6, p.team, actors[p.owner] ?? null);
       p.alive = false;
     }
   }
@@ -1468,7 +1588,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (rush) {
       a.rush -= dt;
       a.ink = Math.min(100, a.ink + 30 * dt);
-      paint(a.x, a.z, 1.15, a.team, a.isPlayer);
+      paint(a.x, a.z, 1.15, a.team, a);
     }
     if (a.swimming) a.ink = Math.min(100, a.ink + 46 * dt);
     else a.ink = Math.min(100, a.ink + (rush ? 0 : 11) * dt);
@@ -1555,6 +1675,26 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.goalZ = bestZ;
   }
 
+  // The water channel (|z| < 4.45) is only crossable on the two side docks and the central
+  // platform. Bots heading across line up with the nearest crossing on their own bank, then
+  // walk straight over it, instead of beelining into the water.
+  const CROSSINGS: [x: number, halfWidth: number][] = [
+    [-18, 2.8],
+    [0, 3.8],
+    [18, 2.8],
+  ];
+  function navTarget(a: Actor, gx: number, gz: number): [number, number] {
+    const goalSide = gz >= 0 ? 1 : -1;
+    const side = a.z >= 0 ? 1 : -1;
+    if (side === goalSide && Math.abs(a.z) > 5.2) return [gx, gz];
+    const ref = Math.abs(a.z) < 7 ? a.x : (a.x + gx) / 2;
+    let best = CROSSINGS[0];
+    for (const c of CROSSINGS) if (Math.abs(c[0] - ref) < Math.abs(best[0] - ref)) best = c;
+    const [bx, half] = best;
+    if (Math.abs(a.x - bx) > half) return [bx, side * 7.5];
+    return [bx, goalSide * 7.5];
+  }
+
   function updateBot(a: Actor, dt: number) {
     if (!a.alive) {
       a.respawn -= dt;
@@ -1565,6 +1705,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       environmentInk(a, dt);
       return;
     }
+    const T = tuneFor(a);
     a.think -= dt;
     a.phase += dt;
     let nearest: Actor | null = null;
@@ -1579,8 +1720,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     }
     if (a.think <= 0) {
-      a.think = 0.35 + rand() * 0.35;
-      if (nearest && nd < (a.weapon === "charger" ? 26 : 16)) a.mode = "fight";
+      a.think = (0.35 + rand() * 0.35) * T.think;
+      if (nearest && nd < (a.weapon === "charger" ? 26 : 16) * T.range) a.mode = "fight";
       else {
         a.mode = "push";
         pickGoal(a);
@@ -1593,8 +1734,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.goalX = nearest.x;
       a.goalZ = nearest.z;
     }
-    let dx = a.goalX - a.x;
-    let dz = a.goalZ - a.z;
+    const [tx, tz] = navTarget(a, a.goalX, a.goalZ);
+    let dx = tx - a.x;
+    let dz = tz - a.z;
     const dist = Math.hypot(dx, dz) || 1;
     dx /= dist;
     dz /= dist;
@@ -1609,7 +1751,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         a.grounded = false;
       }
     }
-    if (a.mode === "fight") {
+    // Strafe while fighting, except near the channel where a sidestep means a swim.
+    if (a.mode === "fight" && Math.abs(a.z) > 7) {
       dx += Math.cos(a.phase * 3) * 0.8;
       dz += Math.sin(a.phase * 3) * 0.8;
       const m = Math.hypot(dx, dz) || 1;
@@ -1621,6 +1764,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.yaw += clamp(dyaw, -3.2 * dt, 3.2 * dt);
     let speed = a.swimming ? 10.2 : floor && floor !== a.team ? 2.8 : 5.7;
     if (a.weapon === "roller" && a.mode === "push") speed *= 0.92;
+    speed *= T.speed;
     const before = Math.hypot(a.vx, a.vz);
     moveActor(a, dx * speed, dz * speed, dt);
     if (before < 0.4 && dist > 2) a.stuck += dt;
@@ -1641,14 +1785,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (a.weapon === "roller") {
       if (a.ink > 8) rollerTick(a, dt, false);
       if (a.mode === "fight" && nearest && nd < 7 && a.fireCd <= 0) {
-        a.fireCd = 0.8;
+        a.fireCd = 0.8 * T.cd;
         const aim = fireDirection(a, nearest.x, nearest.y + 1, nearest.z);
         flickRoller(a, aim, false);
       }
     } else if (a.mode === "fight" && nearest && a.fireCd <= 0 && a.ink > 8) {
-      const aim = fireDirection(a, nearest.x + (rand() - 0.5) * 1.4, nearest.y + 1, nearest.z + (rand() - 0.5) * 1.4);
+      const aim = fireDirection(a, nearest.x + (rand() - 0.5) * 1.4 * T.spread, nearest.y + 1, nearest.z + (rand() - 0.5) * 1.4 * T.spread);
       if (a.weapon === "charger") {
-        a.charge = Math.min(1, a.charge + dt * 0.8);
+        a.charge = Math.min(1, a.charge + (dt * 0.8) / T.cd);
         if (a.charge > 0.65 && nd < 24) {
           shootCharger(a, aim, a.charge, false);
           a.charge = 0;
@@ -1697,12 +1841,16 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     paused = false;
     const winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
     const p = actors[0];
-    result = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths };
+    const board = buildBoard();
+    const res: NonNullable<HudSnap["result"]> = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths, points: board[0].points, board };
+    result = res;
     setBanner(winner === "orange" ? "زېمىن بىزنىڭ!" : winner === "violet" ? "زېمىن قولدىن كەتتى" : "تەڭ-تەڭ");
+    audio.setTempo(false);
+    audio.fanfare(winner === "orange" ? 1 : winner === "violet" ? -1 : 0);
     document.exitPointerLock?.();
     if (!resultSent) {
       resultSent = true;
-      bridge.onResult(result);
+      bridge.onResult(res);
     }
     publish(true);
   }
@@ -1713,6 +1861,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     result = null;
     resultSent = false;
     feed.length = 0;
+    hitMark = 0;
+    killMark = 0;
     countdown = 3;
     timeLeft = MATCH_LEN;
     phase = "countdown";
@@ -1741,6 +1891,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     actors.forEach((a, idx) => {
       a.splats = 0;
       a.deaths = 0;
+      a.painted = 0;
       a.alive = true;
       a.ink = 100;
       a.special = idx === 0 ? 20 : 10;
@@ -1767,13 +1918,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         writeName(a.mesh, a.name, a.team);
       }
     });
-    for (const s of SPAWN_O) paint(s[0], s[1], 3.3, 1, false);
-    for (const s of SPAWN_V) paint(s[0], s[1], 3.3, 2, false);
+    for (const s of SPAWN_O) paint(s[0], s[1], 3.3, 1);
+    for (const s of SPAWN_V) paint(s[0], s[1], 3.3, 2);
     recount();
     hero.root.visible = false;
     audio.unlock();
-    audio.chime();
-    setBanner("جەڭ باشلاندى!");
+    audio.setTempo(false);
+    audio.tick(false);
+    setBanner("تەييارلىنىڭ!");
     publish(true);
   }
 
@@ -1785,6 +1937,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   function goOrbit() {
+    audio.setTempo(false);
     mode = "orbit";
     phase = "menu";
     paused = false;
@@ -1804,6 +1957,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   const audio = createAudio();
+
+  function buildBoard(): BoardRow[] {
+    return actors.map((a) => ({
+      name: a.name,
+      team: a.team === 1 ? "orange" : "violet",
+      weapon: a.weapon,
+      points: Math.round(a.painted * 0.5),
+      splats: a.splats,
+      deaths: a.deaths,
+      isPlayer: a.isPlayer,
+      alive: a.alive,
+    }));
+  }
 
   function publish(force = false) {
     const p = actors[0];
@@ -1828,6 +1994,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       banner: bannerT > 0 ? banner : "",
       result,
       rush: p?.rush ?? 0,
+      hit: hitMark,
+      kill: killMark,
+      board: mode === "play" ? buildBoard() : [],
     };
     if (force || mode === "play") bridge.onHud(snap);
   }
@@ -1856,6 +2025,24 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (!a.alive) continue;
       dot(a.x, a.z, a.team === 1 ? "#ff6a1a" : "#5b4dff", a.isPlayer ? 5 : 3.2);
     }
+    const p = actors[0];
+    if (p.alive) {
+      const f = yawForward(p.yaw);
+      g.save();
+      g.translate(((p.x - MAP.minX) / MAP.w) * w, (1 - (p.z - MAP.minZ) / MAP.d) * h);
+      g.rotate(Math.atan2(-f.z, f.x));
+      g.beginPath();
+      g.moveTo(13, 0);
+      g.lineTo(5, -5);
+      g.lineTo(5, 5);
+      g.closePath();
+      g.fillStyle = "#f4f7fb";
+      g.strokeStyle = "#102033";
+      g.lineWidth = 1.5;
+      g.fill();
+      g.stroke();
+      g.restore();
+    }
   }
 
   function syncVisuals(dt: number) {
@@ -1874,7 +2061,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         const x = -18 + rand() * 36;
         const z = -28 + rand() * 56;
         if (!inWater(x, 0, z)) {
-          paint(x, z, 1.1 + rand(), rand() > 0.5 ? 1 : 2, false);
+          paint(x, z, 1.1 + rand(), rand() > 0.5 ? 1 : 2);
           burst(x, 0.4, z, rand() > 0.5 ? 1 : 2, 8, 3);
         }
       }
@@ -1953,14 +2140,23 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const input = bridge.config.current.input;
     if (mode === "play" && !paused && phase !== "ended") {
       if (countdown > 0) {
+        const shown = Math.ceil(countdown);
         countdown -= dt;
         if (countdown <= 0) {
           countdown = 0;
           phase = "live";
-          bannerT = 0;
-        }
+          setBanner("باشلا!");
+          audio.go();
+        } else if (Math.ceil(countdown) !== shown) audio.tick(false);
       } else {
+        const before = timeLeft;
         timeLeft -= dt;
+        if (before > 60 && timeLeft <= 60) {
+          setBanner("1 مىنۇت قالدى!");
+          audio.chime();
+          audio.setTempo(true);
+        }
+        if (timeLeft > 0 && timeLeft <= 10 && Math.ceil(timeLeft) !== Math.ceil(before)) audio.tick(timeLeft <= 3);
         if (timeLeft <= 0) {
           timeLeft = 0;
           endMatch();
@@ -1978,7 +2174,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
             z.acc = 0.12;
             const ang = rand() * Math.PI * 2;
             const rad = rand() * z.r;
-            paint(z.x + Math.cos(ang) * rad, z.z + Math.sin(ang) * rad, 1.35, z.team, false);
+            paint(z.x + Math.cos(ang) * rad, z.z + Math.sin(ang) * rad, 1.35, z.team, actors[z.owner] ?? null, false);
           }
           if (z.life <= 0) {
             z.alive = false;
@@ -1993,7 +2189,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
             b.acc = 0.18;
             const ang = rand() * Math.PI * 2;
             const rad = 0.4 + rand() * 2.4;
-            paint(b.x + Math.cos(ang) * rad, b.z + Math.sin(ang) * rad, 0.9, b.team, false);
+            paint(b.x + Math.cos(ang) * rad, b.z + Math.sin(ang) * rad, 0.9, b.team, actors[b.owner] ?? null, false);
           }
           if (b.life <= 0) {
             b.alive = false;
@@ -2008,6 +2204,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     }
     bannerT = Math.max(0, bannerT - dt);
+    hitMark = Math.max(0, hitMark - dt * 4);
+    killMark = Math.max(0, killMark - dt * 1.6);
     for (let i = 0; i < PMAX; i++) {
       if (pLife[i] <= 0) continue;
       pLife[i] -= dt;
@@ -2266,7 +2464,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       const x = -22 + rand() * 44;
       const z = -30 + rand() * 60;
       if (inWater(x, 0, z)) continue;
-      paint(x, z, 1.2 + rand() * 1.6, rand() > 0.5 ? 1 : 2, false);
+      paint(x, z, 1.2 + rand() * 1.6, rand() > 0.5 ? 1 : 2);
     }
   }
 
@@ -2299,8 +2497,63 @@ function createAudio() {
   let swimGain: GainNode | null = null;
   let swimOn = false;
   let timer = 0;
-  const notes = [262, 330, 392, 494, 392, 330, 294, 370];
+  let noise: AudioBuffer | null = null;
+  // A Hijaz-flavoured maqam line (D Eb F# G A Bb C D) over a dap frame-drum pattern.
+  const D4 = 293.66, Eb4 = 311.13, Fs4 = 369.99, G4 = 392, A4 = 440, Bb4 = 466.16, C5 = 523.25, D5 = 587.33;
+  const melody = [
+    A4, 0, Bb4, A4, G4, 0, Fs4, G4, A4, 0, D5, C5, Bb4, A4, G4, Fs4,
+    G4, 0, Fs4, Eb4, D4, 0, Eb4, Fs4, G4, A4, Bb4, A4, G4, Fs4, Eb4, D4,
+  ];
+  const dap = ["dum", "", "", "tak", "dum", "", "tak", ""];
+  let stepMs = 170;
   let step = 0;
+
+  function tone(bus: GainNode, type: OscillatorType, freq: number, at: number, peak: number, len: number, glideTo = 0) {
+    if (!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, at);
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, at + len);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(peak, at + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    o.connect(g);
+    g.connect(bus);
+    o.start(at);
+    o.stop(at + len + 0.02);
+    o.onended = () => {
+      o.disconnect();
+      g.disconnect();
+    };
+  }
+
+  function drum(kind: string) {
+    if (!ctx || !music || !noise) return;
+    const t = ctx.currentTime;
+    if (kind === "dum") {
+      tone(music, "sine", 120, t, 0.16, 0.2, 52);
+      return;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 2400;
+    band.Q.value = 1.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.09, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    src.connect(band);
+    band.connect(g);
+    g.connect(music);
+    src.start(t, Math.random() * 0.5, 0.09);
+    src.onended = () => {
+      src.disconnect();
+      band.disconnect();
+      g.disconnect();
+    };
+  }
 
   function ensure() {
     if (ctx) return;
@@ -2317,6 +2570,7 @@ function createAudio() {
     const buffer = ctx.createBuffer(1, ctx.sampleRate * 1, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noise = buffer;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = true;
@@ -2331,23 +2585,14 @@ function createAudio() {
     src.start();
     const loop = () => {
       if (!ctx || !music) return;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.value = notes[step % notes.length];
+      const t = ctx.currentTime;
+      const note = melody[step % melody.length];
+      if (note) tone(music, "triangle", note, t, 0.07, 0.24);
+      if (step % 16 === 0) tone(music, "sine", D4 / 2, t, 0.05, 1.4);
+      const hit = dap[step % dap.length];
+      if (hit) drum(hit);
       step++;
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.03);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-      o.connect(g);
-      g.connect(music);
-      o.start();
-      o.stop(ctx.currentTime + 0.3);
-      o.onended = () => {
-        o.disconnect();
-        g.disconnect();
-      };
-      timer = window.setTimeout(loop, 320);
+      timer = window.setTimeout(loop, stepMs);
     };
     timer = window.setTimeout(loop, 400);
   }
@@ -2426,6 +2671,29 @@ function createAudio() {
         o.start(t0);
         o.stop(t0 + 0.22);
       });
+    },
+    /** Speeds the music up for the final minute. */
+    setTempo(fast: boolean) {
+      stepMs = fast ? 132 : 170;
+    },
+    tick(urgent: boolean) {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      tone(sfx, "sine", urgent ? 1480 : 990, ctx.currentTime, urgent ? 0.12 : 0.08, 0.07);
+    },
+    go() {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      tone(sfx, "triangle", 784, ctx.currentTime, 0.09, 0.14);
+      tone(sfx, "triangle", 1175, ctx.currentTime + 0.1, 0.1, 0.26);
+    },
+    hit() {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      tone(sfx, "triangle", 1250, ctx.currentTime, 0.05, 0.05, 1700);
+    },
+    /** 1 = win, -1 = loss, 0 = tie. */
+    fanfare(outcome: number) {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      const seq = outcome > 0 ? [D4, Fs4, A4, D5] : outcome < 0 ? [A4, G4, Eb4, D4] : [G4, G4];
+      seq.forEach((f, i) => tone(sfx!, "triangle", f, ctx!.currentTime + i * 0.13, 0.1, i === seq.length - 1 ? 0.6 : 0.16));
     },
     swim(on: boolean) {
       if (!ctx || !swimGain) return;
