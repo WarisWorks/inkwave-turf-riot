@@ -29,7 +29,7 @@ export const DEFAULT_SAVE: SaveData = {
   name: "ۋارىس",
   weapon: "spritzer",
   sub: "pop-bomb",
-  special: "tempest",
+  special: "burst",
   wins: 0,
   matches: 0,
   splats: 0,

@@ -512,6 +512,23 @@
   }
 }
 
+@layer components {
+  .end-splash {
+    text-shadow: 0 0.3rem 0 var(--color-navy);
+    animation: count-pop 520ms var(--ink-spring) both;
+  }
+  .results-in {
+    animation: results-in 480ms var(--ink-spring) both;
+  }
+}
+
+@keyframes results-in {
+  from {
+    opacity: 0;
+    translate: -2.5rem 0;
+  }
+}
+
 @keyframes hud-pulse {
   50% {
     opacity: 0.55;
@@ -567,7 +584,9 @@
   .special-ready,
   .special-ready-tag,
   .result-bar > span,
-  .reward-chip {
+  .reward-chip,
+  .end-splash,
+  .results-in {
     animation: none !important;
     transition: none !important;
   }

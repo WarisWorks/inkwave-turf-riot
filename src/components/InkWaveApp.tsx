@@ -54,7 +54,7 @@ type Screen = "menu" | "loadout" | "stage" | "settings" | "howto" | "credits" | 
 /** What the last match earned, shown on the results screen. */
 type Reward = { xp: number; record: boolean; levelUp: number };
 
-const VERSION = "v1.3.0";
+const VERSION = "v1.4.0";
 
 function difficultyName(id: Difficulty) {
   return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";
@@ -575,7 +575,13 @@ function Loadout({
                     className="mb-3 flex w-full items-start gap-3 p-3"
                     onClick={() => onSpecial(s.id)}
                   >
-                    {s.id === "tempest" ? <CloudRain className="mt-2 size-5 shrink-0 text-violet" /> : <Zap className="mt-2 size-5 shrink-0 text-violet" />}
+                    {s.id === "burst" ? (
+                      <Sparkles className="mt-2 size-5 shrink-0 text-violet" />
+                    ) : s.id === "tempest" ? (
+                      <CloudRain className="mt-2 size-5 shrink-0 text-violet" />
+                    ) : (
+                      <Zap className="mt-2 size-5 shrink-0 text-violet" />
+                    )}
                     <span>
                       <span className="block font-display text-lg">{s.name}</span>
                       <span className="text-sm leading-ug text-muted">{s.blurb}</span>
@@ -727,7 +733,9 @@ function HowTo({ onBack }: { onBack: () => void }) {
     { title: "نىشان", keys: ["مائۇس", "Q", "E"], text: "چېكىپ سۆرەڭ ياكى نۇربەلگىنى قۇلۇپلاڭ. كۇنۇپكا ياقتۇرسىڭىز Q ۋە E بىلەن بۇرۇلۇڭ." },
     { title: "ئېتىش", keys: ["سول چېكىش"], text: "پۈركۈگۈچ ئېقىتىدۇ، دومىلاتقۇچ ئىتتىرىدۇ، توپلىغۇچ كۈچ توپلايدۇ، پارتلاتقۇچ ئېگىز ئاتىدۇ." },
     { title: "سەكرەش", keys: ["Space"], text: "دومىلىتىۋاتقاندا سەكرىسىڭىز، چاچرىتىش تېخىمۇ يىراققا ئۇچىدۇ." },
-    { title: "ئۈزۈش", keys: ["Shift"], text: "ئۆز سىياھىڭىزدا بېسىپ تۇرسىڭىز، تېز ئۈزۈپ سىياھ تولۇقلايسىز. رەقىب سىياھى سىزنى ئاستىلىتىدۇ ۋە بويايدۇ." },
+    { title: "ئۈزۈش", keys: ["Shift"], text: "ئۆز سىياھىڭىزدا بېسىپ تۇرسىڭىز، سىياھ بېلىقى شەكلىگە كىرىپ تېز ئۈزىسىز ۋە سىياھ تولۇقلايسىز. رەقىب سىياھى سىزنى ئاستىلىتىدۇ ۋە بويايدۇ." },
+    { title: "تامغا يامىشىش", keys: ["Shift", "W"], text: "ئالدى بىلەن تامنى ئۆز سىياھىڭىز بىلەن بوياڭ، ئاندىن ئۈزۈپ تامغا قاراپ ئىلگىرىلىسىڭىز، تام بويلاپ يۇقىرىغا چىقىسىز." },
+    { title: "ئالاھىدە ماھارەت", keys: ["F"], text: "زېمىن بويىغانسېرى ئۆلچىگۈچ تولىدۇ. تولغاندا F نى بېسىڭ: قىسقا كۈچ يىغىپ، ئەتراپنى بىراقلا سىياھقا چۆمدۈرىدىغان پارتلاش ياسايسىز." },
     { title: "قوشۇمچە / ئالاھىدە", keys: ["ئوڭ چېكىش", "C", "F"], text: "قوشۇمچە قورال ئۈچۈن ئوڭ چېكىش ياكى C. ئالاھىدە ماھارەت ئۆلچىگۈچى تولغاندا F نى بېسىڭ." },
     { title: "نەتىجە تاختىسى", keys: ["Tab"], text: "مۇسابىقە جەريانىدا Tab نى بېسىپ تۇرسىڭىز، ھەممە ئويۇنچىنىڭ بوياش نومۇرى ۋە چاچرىتىشلىرى كۆرۈنىدۇ." },
     { title: "چاچرىتىلىش", keys: [], text: "ساغلاملىق بالدىقى يوق. پۈتۈنلەي سىياھقا بويالسىڭىز، بازىدا قايتا پەيدا بولىسىز." },
@@ -848,6 +856,17 @@ function Hud({
   onAgain: () => void;
 }) {
   const [boardOpen, setBoardOpen] = useState(false);
+  // After the whistle, let the character's celebration play before the results panel slides in.
+  const ended = hud.phase === "ended";
+  const [showResults, setShowResults] = useState(false);
+  useEffect(() => {
+    if (!ended) {
+      setShowResults(false);
+      return;
+    }
+    const id = window.setTimeout(() => setShowResults(true), 2600);
+    return () => window.clearTimeout(id);
+  }, [ended]);
   // Only hijack Tab during live play so it still moves focus on the pause and results screens.
   const inPlayRef = useRef(false);
   inPlayRef.current = hud.phase !== "ended" && !hud.paused;
@@ -925,7 +944,7 @@ function Hud({
         ) : null}
       </div>
 
-      <div className="absolute top-24 left-3 flex max-w-xs flex-col gap-1">
+      <div className={`absolute top-24 left-3 flex max-w-xs flex-col gap-1 ${ended ? "hidden" : ""}`}>
         {hud.feed.map((line) => (
           <p key={line.id} className="rounded-sticker bg-navy/75 px-2 py-0.5 text-sm leading-7">
             {line.text}
@@ -933,7 +952,7 @@ function Hud({
         ))}
       </div>
 
-      {hud.banner ? (
+      {hud.banner && !ended ? (
         <p key={hud.banner} className="hud-banner absolute top-1/3 left-1/2 -translate-x-1/2 font-display text-5xl whitespace-nowrap text-sun md:text-6xl">{hud.banner}</p>
       ) : null}
 
@@ -978,7 +997,7 @@ function Hud({
         </p>
       ) : null}
 
-      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72`}>
+      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72 ${ended ? "hidden" : ""}`}>
         {specialReady ? (
           <p className="special-ready-tag mb-2 flex items-center gap-1.5 rounded-full bg-violet px-3 text-sm text-foam">
             <Sparkles className="size-4" /> {spName} تەييار{touch ? null : <Kbd>F</Kbd>}
@@ -1041,9 +1060,22 @@ function Hud({
         </div>
       ) : null}
 
-      {hud.phase === "ended" && hud.result ? (
-        <div className="pointer-events-auto absolute inset-0 flex items-center justify-center overflow-y-auto bg-navy/72 p-4">
-          <div className="panel my-auto w-full max-w-3xl p-5 pb-9 md:p-6 md:pb-9">
+      {ended && hud.result && !showResults ? (
+        <div className="end-splash absolute top-[9%] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1 rounded-[2rem] bg-navy/55 px-8 py-3 text-center">
+          <p className="font-display text-6xl text-sun md:text-7xl">
+            {hud.result.winner === "orange" ? "غەلىبە!" : hud.result.winner === "violet" ? "مەغلۇپ بولدۇق" : "تەڭ-تەڭ"}
+          </p>
+          <p className="font-display text-3xl">
+            <span className="text-orange">{Math.round(hud.result.orange * 100)}%</span>
+            <span className="text-foam"> · </span>
+            <span className="text-violet">{Math.round(hud.result.blue * 100)}%</span>
+          </p>
+        </div>
+      ) : null}
+
+      {ended && hud.result && showResults ? (
+        <div className="pointer-events-auto absolute inset-0 flex items-center justify-center overflow-y-auto bg-navy/60 p-4 lg:justify-end lg:bg-gradient-to-r lg:from-navy/85 lg:via-navy/60 lg:to-transparent lg:ps-[34%]">
+          <div className="results-in panel my-auto w-full max-w-3xl p-5 pb-9 md:p-6 md:pb-9">
             <span className="ikat-strip" aria-hidden />
             <div className="mt-3 text-center">
               <p className="font-display text-base text-sun">مۇسابىقە ئاخىرلاشتى</p>

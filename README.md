@@ -33,6 +33,18 @@ VITE_MATCH_LEN=75 npm run dev
 
 Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Tempest or Reef Rush.
 
+## Movement, specials and animation (v1.4)
+
+- **Swim-climb walls**: shots that hit a wall leave team ink on it. Hold swim (Shift) and push into a wall carrying your team's ink to swim straight up it; near the ledge you vault over even if the last stretch is bare.
+- **Specials charge, then burst**: every special now has a 0.75 s wind-up (the character lifts and spins inside a glow orb while ink droplets rush in, with a rising whine) followed by an explosive ink burst: instant paint, damage and an expanding shockwave ring. The new default special, **سىياھ پارتلىشى** (Ink Burst), covers a 9 m radius at once; Ink Tempest and Reef Rush add a smaller burst before their own effect.
+- **Motion**: movement accelerates and decelerates smoothly for players and bots; stride and cadence follow speed.
+- **Squid form**: swimming morphs the character into a glossy squid with a pointed mantle, eyes and wagging fins, trailing ink droplets; it turns upright while climbing.
+- **Ink feel**: shots render as stretched droplets along their flight so rapid fire reads as a stream; particles are soft round droplets that bounce; wall splats pop in with a little overshoot.
+- **Characters**: slimmer, athletic proportions with arms in a two-handed aim pose, large expressive eyes with pupils and highlights that blink, glossy ink tentacles on every character, idle breathing and head bob, a recoil kick on every shot, and temporary ink footprints while running.
+- **Camera**: eased follow, closer to centre; after the whistle it arcs round to face the player.
+- **Victory / defeat**: the player hops with arms up, happy eyes and confetti on a win, or droops with sad eyes on a loss; the results panel slides in beside them after a short celebration.
+- Key taps (jump, sub, special) are latched at key-down, so a press shorter than a frame is never lost.
+
 ## Your painting gun (v1.3)
 
 The player's weapons are tuned well above the bots' copies (bots keep the base numbers, scaled by difficulty). Tuning lives in `POWER` at the top of `src/game/engine.ts`.
