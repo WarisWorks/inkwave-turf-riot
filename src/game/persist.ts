@@ -1,4 +1,4 @@
-import type { Quality, SpecialId, SubId, WeaponId } from "./types";
+import type { Difficulty, MatchResult, Quality, SpecialId, SubId, WeaponId } from "./types";
 
 export type SaveData = {
   version: 1;
@@ -13,6 +13,11 @@ export type SaveData = {
   volume: number;
   invertY: boolean;
   quality: Quality;
+  difficulty: Difficulty;
+  /** Lifetime experience; drives the player level. */
+  xp: number;
+  /** Best single-match turf points. */
+  best: number;
 };
 
 const KEY = "inkwave-turf-riot-v1";
@@ -30,6 +35,9 @@ export const DEFAULT_SAVE: SaveData = {
   volume: 0.7,
   invertY: false,
   quality: "high",
+  difficulty: "normal",
+  xp: 0,
+  best: 0,
 };
 
 export function rankTitle(wins: number): string {
@@ -37,6 +45,23 @@ export function rankTitle(wins: number): string {
   if (wins >= 8) return "مەرجان كاپىتانى";
   if (wins >= 3) return "دولقۇن يۈگۈرۈكى";
   return "يېڭى ئەسكەر";
+}
+
+/** Each level needs 400 more XP than the one before it, starting at 1000. */
+export function levelInfo(xp: number) {
+  let level = 1;
+  let into = Math.max(0, Math.floor(xp));
+  let need = 1000;
+  while (into >= need) {
+    into -= need;
+    level++;
+    need = 1000 + 400 * (level - 1);
+  }
+  return { level, into, need };
+}
+
+export function matchXp(r: MatchResult) {
+  return r.points + r.splats * 50 + (r.winner === "orange" ? 300 : 0);
 }
 
 export function loadSave(): SaveData {

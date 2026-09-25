@@ -35,6 +35,8 @@
   --ink-drips: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 30'%3E%3Cpath d='M0 0H200V5L181.4 5C177.4 5 175.65 7 175.65 10L175.65 10.49A3 3 0 1 1 172.35 10.49L172.35 10C172.35 7 170.6 5 166.6 5L139.64 5C135.64 5 133.19 7 133.19 10L133.19 18.66A5.8 5.8 0 1 1 126.81 18.66L126.81 10C126.81 7 124.36 5 120.36 5L87.88 5C83.88 5 81.98 7 81.98 10L81.98 11.49A3.6 3.6 0 1 1 78.02 11.49L78.02 10C78.02 7 76.12 5 72.12 5L43 5C39 5 36.75 7 36.75 10L36.75 16.82A5 5 0 1 1 31.25 16.82L31.25 10C31.25 7 29 5 25 5L0 5Z'/%3E%3Ccircle cx='151' cy='25' r='2.2'/%3E%3Ccircle cx='57' cy='21' r='1.4'/%3E%3C/svg%3E");
   --ink-splat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 3C23 3 23.5 7 26 7.5 29 8 31 4 33.5 6 36 8 33 11 34 13.5 35 16 39 16.5 38.5 20 38 23 34 22.5 33.5 25.5 33 28.5 36.5 31 34 33.5 31.5 36 29 32.5 26 33.5 23 34.5 23 38 20 38 17 38 16.5 34 14 33.5 11 33 9 36.5 6.5 34 4 31.5 7.5 29 6.5 26 5.5 23 1.5 23 1.5 20 1.5 17 5.5 16.5 6.5 14 7.5 11 4 8.5 6.5 6 9 3.5 11.5 7.5 14 6.5 16.5 5.5 17 3 20 3Z'/%3E%3Ccircle cx='37' cy='4' r='2'/%3E%3Ccircle cx='3.5' cy='37' r='1.6'/%3E%3Ccircle cx='38.4' cy='30.5' r='1.2'/%3E%3C/svg%3E");
   --ink-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
+  /* Stepped diamonds with offset rows — the blurred edge of ikat-dyed Etles silk. */
+  --ikat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 10' preserveAspectRatio='none'%3E%3Crect width='40' height='10' fill='%23c8102e'/%3E%3Cg fill='%23ffc81e'%3E%3Crect x='8.6' y='0' width='2.6' height='2'/%3E%3Crect x='6.8' y='2' width='6.6' height='2'/%3E%3Crect x='4.6' y='4' width='10.6' height='2'/%3E%3Crect x='7.2' y='6' width='6' height='2'/%3E%3Crect x='9' y='8' width='2.4' height='2'/%3E%3C/g%3E%3Crect x='9.2' y='4' width='1.8' height='2' fill='%23161616'/%3E%3Cg fill='%2310813f'%3E%3Crect x='28.8' y='0' width='2.4' height='2'/%3E%3Crect x='26.6' y='2' width='6.6' height='2'/%3E%3Crect x='24.8' y='4' width='10.4' height='2'/%3E%3Crect x='26.9' y='6' width='6.4' height='2'/%3E%3Crect x='28.6' y='8' width='2.6' height='2'/%3E%3C/g%3E%3Crect x='29.2' y='4' width='1.8' height='2' fill='%23f5efe0'/%3E%3Crect x='19' y='0' width='2' height='10' fill='%231c3597'/%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -353,6 +355,182 @@
   }
 }
 
+@layer components {
+  /* ── Etles (ikat) accent strip ─────────────────────────────── */
+  .ikat-strip {
+    display: block;
+    height: 0.7rem;
+    border-radius: 0.35rem;
+    background: var(--ikat) 0 0 / 2.5rem 100% repeat-x;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+  }
+
+  /* ── Player level bar ──────────────────────────────────────── */
+  .ink-xp {
+    display: block;
+    height: 0.7rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-navy) 55%, black);
+  }
+  .ink-xp > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background:
+      linear-gradient(to bottom, rgb(255 255 255 / 0.35), transparent 60%),
+      var(--color-sun);
+  }
+
+  /* ── Crosshair feedback ────────────────────────────────────── */
+  .hit-mark {
+    position: absolute;
+    inset: -0.55rem;
+    transition:
+      opacity 90ms linear,
+      transform 90ms linear;
+  }
+  .hit-mark > span {
+    position: absolute;
+    background: var(--color-foam);
+    box-shadow: 0 0 0 1px var(--color-navy);
+  }
+  .hit-mark > span:nth-child(1),
+  .hit-mark > span:nth-child(2) {
+    left: 50%;
+    width: 0.2rem;
+    height: 0.6rem;
+    translate: -50% 0;
+  }
+  .hit-mark > span:nth-child(1) {
+    top: 0;
+  }
+  .hit-mark > span:nth-child(2) {
+    bottom: 0;
+  }
+  .hit-mark > span:nth-child(3),
+  .hit-mark > span:nth-child(4) {
+    top: 50%;
+    width: 0.6rem;
+    height: 0.2rem;
+    translate: 0 -50%;
+  }
+  .hit-mark > span:nth-child(3) {
+    left: 0;
+  }
+  .hit-mark > span:nth-child(4) {
+    right: 0;
+  }
+  .kill-splat {
+    position: absolute;
+    inset: -0.4rem;
+    background: var(--color-orange);
+    mask: var(--ink-splat) center / contain no-repeat;
+    transition:
+      opacity 120ms linear,
+      transform 120ms linear;
+  }
+
+  /* ── HUD alerts ────────────────────────────────────────────── */
+  .clock-final {
+    animation: hud-pulse 1s ease-in-out infinite;
+  }
+  .final-count {
+    opacity: 0.85;
+    text-shadow: 0 0.3rem 0 var(--color-navy);
+    animation: count-pop 1s ease-out both;
+  }
+  .hud-banner {
+    text-shadow: 0 0.25rem 0 var(--color-navy);
+    animation: count-pop 420ms var(--ink-spring) both;
+  }
+  .low-ink,
+  .ink-low {
+    animation: hud-pulse 0.8s ease-in-out infinite;
+  }
+  .special-ready {
+    box-shadow: 0 0 0 3px var(--color-sun), 0 0 1.2rem var(--color-violet);
+    animation: hud-pulse 1.2s ease-in-out infinite;
+  }
+  .special-ready-tag {
+    box-shadow: 0 0.2rem 0 0 var(--color-violet-deep);
+    animation: count-pop 380ms var(--ink-spring) both;
+  }
+
+  /* ── Scoreboard ────────────────────────────────────────────── */
+  .board-team {
+    border-radius: 1.1rem 0.8rem 1.2rem 0.9rem / 0.9rem 1.1rem 0.8rem 1.2rem;
+    border: 2px solid color-mix(in srgb, var(--team) 70%, transparent);
+    background: color-mix(in srgb, var(--color-navy-2) 85%, transparent);
+    padding: 0.5rem 0.25rem 0.4rem;
+  }
+  .board-orange {
+    --team: var(--color-orange);
+  }
+  .board-violet {
+    --team: var(--color-violet);
+  }
+  .board-team tbody tr {
+    border-top: 1px solid color-mix(in srgb, var(--color-foam) 12%, transparent);
+  }
+  .board-me {
+    background: color-mix(in srgb, var(--team) 22%, transparent);
+  }
+
+  .result-bar {
+    display: flex;
+    height: 1rem;
+    overflow: hidden;
+    border-radius: 999px;
+    border: 2px solid var(--color-foam);
+    background: var(--color-navy);
+  }
+  .result-bar > span {
+    display: block;
+    height: 100%;
+    animation: bar-fill 900ms var(--ink-spring) both;
+  }
+  /* RTL: Orange sits on the right and grows from that edge; Violet grows from the left. */
+  .result-bar > span:first-child {
+    transform-origin: right;
+  }
+  .result-bar > span:last-child {
+    transform-origin: left;
+  }
+
+  .reward-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 1rem 0.7rem 1.1rem 0.8rem / 0.8rem 1rem 0.7rem 1.1rem;
+    background: var(--ink);
+    box-shadow: 0 0.2rem 0 0 var(--ink-deep);
+    padding: 0.1rem 0.75rem;
+    color: var(--ink-fg);
+    font-family: var(--font-display);
+    animation: count-pop 420ms var(--ink-spring) both;
+  }
+}
+
+@keyframes hud-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes count-pop {
+  from {
+    opacity: 0;
+    scale: 1.6;
+  }
+}
+
+@keyframes bar-fill {
+  from {
+    scale: 0 1;
+  }
+}
+
 @keyframes ink-flow {
   to {
     mask-position: -5rem 100%;
@@ -380,7 +558,16 @@
   .ink-option,
   .ink-btn-wave,
   .ink-option::before,
-  .ink-splat {
+  .ink-splat,
+  .clock-final,
+  .final-count,
+  .hud-banner,
+  .low-ink,
+  .ink-low,
+  .special-ready,
+  .special-ready-tag,
+  .result-bar > span,
+  .reward-chip {
     animation: none !important;
     transition: none !important;
   }

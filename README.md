@@ -13,6 +13,12 @@ npm run dev
 
 Open the local URL Vite prints (default `http://localhost:5173`).
 
+To test the end-of-match flow without waiting three minutes, shorten the match:
+
+```bash
+VITE_MATCH_LEN=75 npm run dev
+```
+
 ## Controls
 
 - **WASD** — move (A/D strafe)
@@ -23,8 +29,19 @@ Open the local URL Vite prints (default `http://localhost:5173`).
 - **Right click** / **C** — throw sub weapon
 - **F** — special (when meter is full)
 - **Esc** — pause
+- **Tab** (hold) — scoreboard
 
 Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Tempest or Reef Rush.
+
+## v1.1 gameplay
+
+- **Difficulty**: Easy / Normal / Hard in Settings. Only the Violet bots scale (speed, reaction, aim spread, fire rate, damage to you, special charge); your teammates always play Normal.
+- **Smarter bots**: bots route across the water channel via the two docks or the central platform instead of walking into it, and they now charge and fire their specials too.
+- **Feedback**: hit marker and splat burst on the crosshair, hit sound, low-ink prompt, special-ready tag, a "1 minute left" callout, and a final 10-second countdown with ticks.
+- **Scoreboard**: hold Tab (or tap نەتىجە on touch) mid-match; the results screen shows both teams with turf points, splats, washouts and an MVP crown.
+- **Progression**: every match earns XP (turf points + 50 per splat + 300 for a win). The player card shows level, XP bar and personal best.
+- **Etles (ئەتلەس) banners**: procedural ikat-silk banners hang on the harbor walls, and an ikat strip accents the menu and results.
+- **Music**: a Hijaz-flavoured maqam line over a dap frame-drum pattern that speeds up in the final minute, plus win/lose jingles.
 
 ## Uyghur edition
 

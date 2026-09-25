@@ -2,6 +2,7 @@ export type WeaponId = "spritzer" | "roller" | "charger" | "blaster";
 export type SubId = "pop-bomb" | "ink-beacon";
 export type SpecialId = "tempest" | "reef-rush";
 export type Quality = "low" | "high";
+export type Difficulty = "easy" | "normal" | "hard";
 
 export type InputState = {
   ax: number;
@@ -24,10 +25,22 @@ export type LiveConfig = {
   volume: number;
   invertY: boolean;
   quality: Quality;
+  difficulty: Difficulty;
   input: InputState;
 };
 
 export type FeedLine = { id: number; text: string };
+
+export type BoardRow = {
+  name: string;
+  team: "orange" | "violet";
+  weapon: WeaponId;
+  points: number;
+  splats: number;
+  deaths: number;
+  isPlayer: boolean;
+  alive: boolean;
+};
 
 export type MatchResult = {
   winner: "orange" | "violet" | "tie";
@@ -35,6 +48,8 @@ export type MatchResult = {
   blue: number;
   splats: number;
   deaths: number;
+  points: number;
+  board: BoardRow[];
 };
 
 export type HudSnap = {
@@ -58,6 +73,11 @@ export type HudSnap = {
   banner: string;
   result: MatchResult | null;
   rush: number;
+  /** 0–1, fades after the player lands a hit. */
+  hit: number;
+  /** 0–1, fades after the player splats someone. */
+  kill: number;
+  board: BoardRow[];
 };
 
 export type WeaponInfo = {
@@ -128,6 +148,26 @@ export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
   { id: "tempest", name: "سىياھ بورىنى", blurb: "يامغۇر بۇلۇتى چوڭ بىر دائىرە زېمىننى سىياھقا چىلايدۇ." },
   { id: "reef-rush", name: "مەرجان يۈگۈرۈشى", blurb: "خالىغان يەرگە ئۇچقاندەك يۈگۈرۈپ، ئارقىڭىزدا بويالغان ئىز قالدۇرۇڭ." },
 ];
+
+export const DIFFICULTIES: { id: Difficulty; name: string }[] = [
+  { id: "easy", name: "ئاسان" },
+  { id: "normal", name: "ئادەتتىكى" },
+  { id: "hard", name: "قىيىن" },
+];
+
+/** Ranks by turf points, with each splat worth 60 points. */
+export function mvpIndex(board: BoardRow[]): number {
+  let best = -1;
+  let bestScore = -1;
+  board.forEach((r, i) => {
+    const score = r.points + r.splats * 60;
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  });
+  return best;
+}
 
 export function weaponById(id: WeaponId): WeaponInfo {
   return WEAPONS.find((w) => w.id === id) ?? WEAPONS[0];
