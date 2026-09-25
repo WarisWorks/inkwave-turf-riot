@@ -19,7 +19,7 @@ const KEY = "inkwave-turf-riot-v1";
 
 export const DEFAULT_SAVE: SaveData = {
   version: 1,
-  name: "Waris",
+  name: "ۋارىس",
   weapon: "spritzer",
   sub: "pop-bomb",
   special: "tempest",
@@ -33,10 +33,10 @@ export const DEFAULT_SAVE: SaveData = {
 };
 
 export function rankTitle(wins: number): string {
-  if (wins >= 15) return "Wave Legend";
-  if (wins >= 8) return "Reef Captain";
-  if (wins >= 3) return "Tide Runner";
-  return "Fresh Recruit";
+  if (wins >= 15) return "دولقۇن ئەپسانىسى";
+  if (wins >= 8) return "مەرجان كاپىتانى";
+  if (wins >= 3) return "دولقۇن يۈگۈرۈكى";
+  return "يېڭى ئەسكەر";
 }
 
 export function loadSave(): SaveData {
@@ -46,7 +46,10 @@ export function loadSave(): SaveData {
     if (!raw) return { ...DEFAULT_SAVE };
     const parsed = JSON.parse(raw) as Partial<SaveData>;
     if (parsed.version !== 1) return { ...DEFAULT_SAVE };
-    return { ...DEFAULT_SAVE, ...parsed, version: 1 };
+    const save = { ...DEFAULT_SAVE, ...parsed, version: 1 as const };
+    // Saves from the English build still carry the old Latin default name.
+    if (save.name === "Waris") save.name = DEFAULT_SAVE.name;
+    return save;
   } catch {
     return { ...DEFAULT_SAVE };
   }
