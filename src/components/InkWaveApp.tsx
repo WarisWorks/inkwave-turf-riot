@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import {
   Bomb,
+  Check,
   CircleHelp,
   CloudRain,
   Crosshair,
@@ -8,6 +9,7 @@ import {
   Pause,
   Play,
   Radio,
+  RotateCcw,
   ScrollText,
   Settings,
   ShowerHead,
@@ -39,12 +41,69 @@ function clock(t: number) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="grid grid-cols-[5.5rem_1fr] items-center gap-2">
+    <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
       <span className="text-sm text-muted">{label}</span>
       <span className="stat-track">
         <span className="block h-full bg-orange" style={{ width: `${Math.round(value * 100)}%` }} />
       </span>
     </div>
+  );
+}
+
+type Tone = "foam" | "orange" | "violet";
+
+function InkButton({
+  tone = "foam",
+  icon,
+  className = "",
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: Tone; icon?: ReactNode }) {
+  return (
+    <button type="button" {...rest} className={`ink-btn ink-${tone} font-display ${className}`}>
+      <span className="ink-btn-wave" aria-hidden />
+      {icon ? (
+        <span className="ink-btn-icon" aria-hidden>
+          {icon}
+        </span>
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+function InkOption({
+  selected,
+  tone = "orange",
+  className = "",
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { selected: boolean; tone?: Tone }) {
+  return (
+    <button type="button" aria-pressed={selected} {...rest} className={`ink-option ink-${tone} ${className}`}>
+      {selected ? (
+        <span className="ink-splat" aria-hidden>
+          <Check className="size-3.5" strokeWidth={3.5} />
+        </span>
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+function BackButton({ onBack }: { onBack: () => void }) {
+  return (
+    <InkButton icon={<House className="size-4" />} className="h-11 w-fit ps-1.5 pe-4 text-base" onClick={onBack}>
+      باش بەت
+    </InkButton>
+  );
+}
+
+function Kbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="ink-kbd" dir="auto">
+      {children}
+    </kbd>
   );
 }
 
@@ -170,8 +229,8 @@ export function InkWaveApp() {
   const playing = screen === "play";
 
   return (
-    <div className="fixed inset-0 touch-none overflow-hidden bg-navy text-foam select-none">
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="InkWave harbor" />
+    <div className="alkatip-basma fixed inset-0 touch-none overflow-hidden bg-navy text-foam select-none">
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="سىياھ دولقۇنى پورتى" />
       <canvas
         ref={miniRef}
         width={180}
@@ -249,12 +308,11 @@ function Menu({
   onNavigate: (s: Screen) => void;
   onName: (name: string) => void;
 }) {
-  const buttons: { label: string; screen?: Screen; icon: ReactNode; action?: () => void; primary?: boolean }[] = [
-    { label: ready ? "PLAY" : "Waking the tide…", icon: <Play className="size-5" />, action: onPlay, primary: true },
-    { label: "LOADOUT", screen: "loadout", icon: <Crosshair className="size-5" /> },
-    { label: "SETTINGS", screen: "settings", icon: <Settings className="size-5" /> },
-    { label: "HOW TO PLAY", screen: "howto", icon: <CircleHelp className="size-5" /> },
-    { label: "CREDITS", screen: "credits", icon: <ScrollText className="size-5" /> },
+  const buttons: { label: string; screen: Screen; icon: ReactNode }[] = [
+    { label: "قورال-جابدۇق", screen: "loadout", icon: <Crosshair className="size-5" /> },
+    { label: "تەڭشەك", screen: "settings", icon: <Settings className="size-5" /> },
+    { label: "ئويناش ئۇسۇلى", screen: "howto", icon: <CircleHelp className="size-5" /> },
+    { label: "ئويۇن ھەققىدە", screen: "credits", icon: <ScrollText className="size-5" /> },
   ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
@@ -267,43 +325,50 @@ function Menu({
               <span className="absolute -bottom-1 left-2 h-4 w-4 rounded-full bg-sun" />
             </span>
             <div>
-              <p className="font-display text-xs tracking-widest text-sun">HARBOR TURF WAR</p>
-              <h1 className="font-display text-4xl leading-none text-foam md:text-5xl">
-                INKWAVE
+              <p className="font-display text-sm text-sun">پورتتىكى زېمىن تالىشىش جېڭى</p>
+              <h1 className="font-display text-4xl leading-[1.35] text-foam md:text-5xl">
+                سىياھ دولقۇنى
                 <br />
-                TURF RIOT
+                <span className="text-orange">زېمىن جېڭى</span>
               </h1>
             </div>
           </div>
-          <p className="text-sm leading-relaxed text-muted">Paint the coast. The side that owns the ground when the tide runs out wins.</p>
-          <div className="flex flex-col gap-3">
+          <p className="text-base leading-ug text-muted">
+            قىرغاقنى سىياھ بىلەن بوياڭ. دولقۇن چېكىنگەندە تېخىمۇ كۆپ زېمىنغا ئىگە بولغان تەرەپ غەلىبە قىلىدۇ.
+          </p>
+          <div className="flex flex-col gap-5 pb-4">
+            <InkButton
+              tone="orange"
+              className="ink-btn-hero h-16 justify-start ps-2 pe-4 text-2xl"
+              disabled={!ready}
+              aria-busy={!ready}
+              icon={<Play className="size-6" />}
+              onClick={onPlay}
+            >
+              {ready ? (
+                <>
+                  باشلاش
+                  <span className="ink-chip ms-auto">زېمىن جېڭى · 4 گە 4</span>
+                </>
+              ) : (
+                <span className="text-lg">دولقۇن ئويغىنىۋاتىدۇ…</span>
+              )}
+            </InkButton>
             {buttons.map((b) => (
-              <button
-                key={b.label}
-                type="button"
-                disabled={b.primary && !ready}
-                className={`sticker flex h-12 items-center justify-center gap-2 rounded-sticker px-4 font-display text-lg ${
-                  b.primary ? "bg-orange text-navy" : "bg-foam text-navy"
-                }`}
-                onClick={() => {
-                  if (b.screen === "loadout") onNavigate("loadout");
-                  else if (b.screen) onNavigate(b.screen);
-                  else b.action?.();
-                }}
-              >
-                {b.icon}
-                {b.primary ? (ready ? "PLAY  ·  Turf War 4v4" : b.label) : b.label}
-              </button>
+              <InkButton key={b.screen} icon={b.icon} className="h-12 justify-start ps-1.5 pe-4 text-lg" onClick={() => onNavigate(b.screen)}>
+                {b.label}
+              </InkButton>
             ))}
           </div>
         </section>
-        <section className="panel w-full p-5 md:ml-auto md:w-80">
-          <p className="font-display text-xs tracking-widest text-sun">PLAYER CARD</p>
+        <section className="panel w-full p-5 md:ms-auto md:w-80">
+          <p className="font-display text-sm text-sun">ئويۇنچى كارتىسى</p>
           <label className="mt-3 block text-sm text-muted" htmlFor="wavelet-name">
-            Wavelet name
+            دولقۇنچاق ئىسمى
           </label>
           <input
             id="wavelet-name"
+            dir="auto"
             value={save.name}
             maxLength={16}
             suppressHydrationWarning
@@ -313,23 +378,23 @@ function Menu({
           <p className="mt-4 font-display text-2xl text-orange">{rankTitle(save.wins)}</p>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt className="text-muted">Wins</dt>
+              <dt className="text-muted">غەلىبە</dt>
               <dd className="font-display text-xl">{save.wins}</dd>
             </div>
             <div>
-              <dt className="text-muted">Matches</dt>
+              <dt className="text-muted">مۇسابىقە</dt>
               <dd className="font-display text-xl">{save.matches}</dd>
             </div>
             <div>
-              <dt className="text-muted">Splats</dt>
+              <dt className="text-muted">چاچرىتىش</dt>
               <dd className="font-display text-xl">{save.splats}</dd>
             </div>
             <div>
-              <dt className="text-muted">Weapon</dt>
+              <dt className="text-muted">قورال</dt>
               <dd className="font-display text-xl">{weapon}</dd>
             </div>
           </dl>
-          <p className="mt-4 text-sm text-muted">Team Orange · 3-minute harbor matches</p>
+          <p className="mt-4 text-sm leading-ug text-muted">ئاپېلسىن گۇرۇپپا · 3 مىنۇتلۇق پورت مۇسابىقىسى</p>
         </section>
       </div>
     </div>
@@ -353,73 +418,62 @@ function Loadout({
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-4 p-4 pb-12 md:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <button type="button" className="sticker flex h-11 items-center gap-2 rounded-sticker bg-foam px-4 font-display text-navy" onClick={onBack}>
-            <House className="size-4" /> Menu
-          </button>
-          <h2 className="font-display text-3xl">Loadout</h2>
+        <div className="flex items-center justify-between gap-3 pb-2">
+          <BackButton onBack={onBack} />
+          <h2 className="font-display text-3xl">قورال-جابدۇق</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="panel p-4">
-            <p className="mb-3 text-sm text-muted">Main weapon</p>
+            <p className="mb-3 text-sm text-muted">ئاساسىي قورال</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {WEAPONS.map((w) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => onWeapon(w.id)}
-                  className={`rounded-sticker border-2 p-3 text-left ${save.weapon === w.id ? "border-orange bg-navy-2" : "border-foam/40 bg-navy"}`}
-                >
-                  <span className="font-display text-lg">{w.name}</span>
-                  <span className="mt-1 block text-xs tracking-widest text-sun">{w.kind}</span>
-                </button>
+                <InkOption key={w.id} selected={save.weapon === w.id} className="p-3" onClick={() => onWeapon(w.id)}>
+                  <span className="block font-display text-lg">{w.name}</span>
+                  <span className="block text-sm text-sun">{w.kind}</span>
+                </InkOption>
               ))}
             </div>
-            <p className="mt-4 text-sm leading-relaxed text-muted">{info.blurb}</p>
+            <p className="mt-4 text-sm leading-ug text-muted">{info.blurb}</p>
             <div className="mt-3 flex flex-col gap-2">
-              <Stat label="Range" value={info.range} />
-              <Stat label="Damage" value={info.damage} />
-              <Stat label="Fire rate" value={info.fire} />
-              <Stat label="Mobility" value={info.mobility} />
-              <Stat label="Ink cover" value={info.cover} />
+              <Stat label="ئارىلىق" value={info.range} />
+              <Stat label="زەربە" value={info.damage} />
+              <Stat label="ئېتىش سۈرئىتى" value={info.fire} />
+              <Stat label="ھەرىكەتچانلىق" value={info.mobility} />
+              <Stat label="بوياش دائىرىسى" value={info.cover} />
             </div>
           </div>
           <div className="flex flex-col gap-4">
             <div className="panel p-4">
-              <p className="mb-2 text-sm text-muted">Sub weapon</p>
+              <p className="mb-3 text-sm text-muted">قوشۇمچە قورال</p>
               {SUBS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onSub(s.id)}
-                  className={`mb-2 flex w-full items-start gap-3 rounded-sticker border-2 p-3 text-left ${save.sub === s.id ? "border-orange bg-navy-2" : "border-foam/30"}`}
-                >
-                  {s.id === "pop-bomb" ? <Bomb className="mt-0.5 size-5 text-orange" /> : <Radio className="mt-0.5 size-5 text-orange" />}
+                <InkOption key={s.id} selected={save.sub === s.id} className="mb-3 flex w-full items-start gap-3 p-3" onClick={() => onSub(s.id)}>
+                  {s.id === "pop-bomb" ? <Bomb className="mt-2 size-5 shrink-0 text-orange" /> : <Radio className="mt-2 size-5 shrink-0 text-orange" />}
                   <span>
-                    <span className="block font-display">{s.name}</span>
-                    <span className="text-sm text-muted">{s.blurb}</span>
+                    <span className="block font-display text-lg">{s.name}</span>
+                    <span className="text-sm leading-ug text-muted">{s.blurb}</span>
                   </span>
-                </button>
+                </InkOption>
               ))}
             </div>
             <div className="panel p-4">
-              <p className="mb-2 text-sm text-muted">Special</p>
+              <p className="mb-3 text-sm text-muted">ئالاھىدە ماھارەت</p>
               {SPECIALS.map((s) => (
-                <button
+                <InkOption
                   key={s.id}
-                  type="button"
+                  tone="violet"
+                  selected={save.special === s.id}
+                  className="mb-3 flex w-full items-start gap-3 p-3"
                   onClick={() => onSpecial(s.id)}
-                  className={`mb-2 flex w-full items-start gap-3 rounded-sticker border-2 p-3 text-left ${save.special === s.id ? "border-violet bg-navy-2" : "border-foam/30"}`}
                 >
-                  {s.id === "tempest" ? <CloudRain className="mt-0.5 size-5 text-violet" /> : <Zap className="mt-0.5 size-5 text-violet" />}
+                  {s.id === "tempest" ? <CloudRain className="mt-2 size-5 shrink-0 text-violet" /> : <Zap className="mt-2 size-5 shrink-0 text-violet" />}
                   <span>
-                    <span className="block font-display">{s.name}</span>
-                    <span className="text-sm text-muted">{s.blurb}</span>
+                    <span className="block font-display text-lg">{s.name}</span>
+                    <span className="text-sm leading-ug text-muted">{s.blurb}</span>
                   </span>
-                </button>
+                </InkOption>
               ))}
             </div>
-            <p className="text-sm text-muted">Your wavelet is posing on the orange plaza. Team color follows Orange.</p>
+            <p className="text-sm leading-ug text-muted">دولقۇنچىقىڭىز ئاپېلسىن مەيداندا كۆرۈنۈش بېرىۋاتىدۇ. گۇرۇپپا رەڭگىڭىز — ئاپېلسىن.</p>
           </div>
         </div>
       </div>
@@ -431,35 +485,28 @@ function SettingsScreen({ save, onBack, onChange }: { save: SaveData; onBack: ()
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-4 pb-12">
-        <button type="button" className="sticker flex h-11 w-fit items-center gap-2 rounded-sticker bg-foam px-4 font-display text-navy" onClick={onBack}>
-          <House className="size-4" /> Menu
-        </button>
-        <h2 className="font-display text-4xl">Settings</h2>
-        <section className="panel flex flex-col gap-4 p-5">
-          <label className="flex flex-col gap-2 text-sm">
-            Look sensitivity
+        <BackButton onBack={onBack} />
+        <h2 className="mt-2 font-display text-4xl">تەڭشەك</h2>
+        <section className="panel flex flex-col gap-5 p-5">
+          <label className="flex flex-col gap-2 text-base">
+            قاراش سەزگۈرلۈكى
             <input type="range" min={0.45} max={2} step={0.05} value={save.sens} onChange={(e) => onChange({ sens: Number(e.target.value) })} />
           </label>
-          <label className="flex items-center justify-between gap-3 text-sm">
-            Invert look up / down
+          <label className="flex items-center justify-between gap-3 text-base">
+            يۇقىرى-تۆۋەن قاراشنى ئەكسىچە قىلىش
             <input type="checkbox" checked={save.invertY} onChange={(e) => onChange({ invertY: e.target.checked })} className="size-5" />
           </label>
-          <label className="flex flex-col gap-2 text-sm">
-            Volume
+          <label className="flex flex-col gap-2 text-base">
+            ئاۋاز
             <input type="range" min={0} max={1} step={0.01} value={save.volume} onChange={(e) => onChange({ volume: Number(e.target.value) })} />
           </label>
-          <div className="flex flex-col gap-2 text-sm">
-            Graphics
-            <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-2 text-base">
+            گرافىكا
+            <div className="grid grid-cols-2 gap-3">
               {(["low", "high"] as Quality[]).map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => onChange({ quality: q })}
-                  className={`h-11 rounded-sticker border-2 font-display ${save.quality === q ? "border-orange bg-orange text-navy" : "border-foam text-foam"}`}
-                >
-                  {q === "low" ? "Smooth" : "Sharp"}
-                </button>
+                <InkOption key={q} selected={save.quality === q} className="h-12 text-center font-display text-lg" onClick={() => onChange({ quality: q })}>
+                  {q === "low" ? "راۋان" : "ئېنىق"}
+                </InkOption>
               ))}
             </div>
           </div>
@@ -470,28 +517,35 @@ function SettingsScreen({ save, onBack, onChange }: { save: SaveData; onBack: ()
 }
 
 function HowTo({ onBack }: { onBack: () => void }) {
-  const rows = [
-    ["Move", "WASD or arrows. A strafes left, D strafes right."],
-    ["Aim", "Click-drag or pointer lock. Q and E turn if you prefer keys."],
-    ["Shoot", "Left mouse. Spritzer streams, roller pushes, charger charges, blaster lobs."],
-    ["Jump", "Space. A roller flick flies farther if you jump while rolling."],
-    ["Swim", "Hold Shift on your own ink to dash and refill. Enemy ink slows you and covers you."],
-    ["Sub / Special", "Right mouse or C for sub. F when the special meter is full."],
-    ["Splat", "There is no health bar. Get covered and you respawn at base."],
-    ["Win", "Own more of the harbor than Violet when three minutes end."],
+  const rows: { title: string; keys: string[]; text: string }[] = [
+    { title: "ھەرىكەت", keys: ["WASD", "↑↓←→"], text: "ئالدىغا، كەينىگە ۋە يانغا مېڭىڭ؛ يۆنىلىش كۇنۇپكىلىرىمۇ بولىدۇ. A سولغا، D ئوڭغا يانتۇ ماڭىدۇ." },
+    { title: "نىشان", keys: ["مائۇس", "Q", "E"], text: "چېكىپ سۆرەڭ ياكى نۇربەلگىنى قۇلۇپلاڭ. كۇنۇپكا ياقتۇرسىڭىز Q ۋە E بىلەن بۇرۇلۇڭ." },
+    { title: "ئېتىش", keys: ["سول چېكىش"], text: "پۈركۈگۈچ ئېقىتىدۇ، دومىلاتقۇچ ئىتتىرىدۇ، توپلىغۇچ كۈچ توپلايدۇ، پارتلاتقۇچ ئېگىز ئاتىدۇ." },
+    { title: "سەكرەش", keys: ["Space"], text: "دومىلىتىۋاتقاندا سەكرىسىڭىز، چاچرىتىش تېخىمۇ يىراققا ئۇچىدۇ." },
+    { title: "ئۈزۈش", keys: ["Shift"], text: "ئۆز سىياھىڭىزدا بېسىپ تۇرسىڭىز، تېز ئۈزۈپ سىياھ تولۇقلايسىز. رەقىب سىياھى سىزنى ئاستىلىتىدۇ ۋە بويايدۇ." },
+    { title: "قوشۇمچە / ئالاھىدە", keys: ["ئوڭ چېكىش", "C", "F"], text: "قوشۇمچە قورال ئۈچۈن ئوڭ چېكىش ياكى C. ئالاھىدە ماھارەت ئۆلچىگۈچى تولغاندا F نى بېسىڭ." },
+    { title: "چاچرىتىلىش", keys: [], text: "ساغلاملىق بالدىقى يوق. پۈتۈنلەي سىياھقا بويالسىڭىز، بازىدا قايتا پەيدا بولىسىز." },
+    { title: "غەلىبە", keys: [], text: "ئۈچ مىنۇت توشقاندا پورتنىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
   ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex max-w-xl flex-col gap-4 p-4 pb-12">
-        <button type="button" className="sticker flex h-11 w-fit items-center gap-2 rounded-sticker bg-foam px-4 font-display text-navy" onClick={onBack}>
-          <House className="size-4" /> Menu
-        </button>
-        <h2 className="font-display text-4xl">How to play</h2>
+        <BackButton onBack={onBack} />
+        <h2 className="mt-2 font-display text-4xl">ئويناش ئۇسۇلى</h2>
         <div className="panel divide-y divide-foam/15 p-2">
-          {rows.map(([k, v]) => (
-            <div key={k} className="px-3 py-3">
-              <p className="font-display text-lg text-orange">{k}</p>
-              <p className="text-sm leading-relaxed text-foam">{v}</p>
+          {rows.map((r) => (
+            <div key={r.title} className="px-3 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-display text-lg text-orange">{r.title}</p>
+                {r.keys.length ? (
+                  <span className="ms-auto flex flex-wrap gap-1.5">
+                    {r.keys.map((k) => (
+                      <Kbd key={k}>{k}</Kbd>
+                    ))}
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-sm leading-ug text-foam">{r.text}</p>
             </div>
           ))}
         </div>
@@ -504,15 +558,14 @@ function Credits({ onBack }: { onBack: () => void }) {
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-4 pb-12">
-        <button type="button" className="sticker flex h-11 w-fit items-center gap-2 rounded-sticker bg-foam px-4 font-display text-navy" onClick={onBack}>
-          <House className="size-4" /> Menu
-        </button>
-        <h2 className="font-display text-4xl">Credits</h2>
-        <section className="panel p-5 leading-relaxed">
-          <p className="font-display text-2xl text-orange">InkWave Turf Riot</p>
-          <p className="mt-3">An original 4v4 turf-war shooter. Made with Claude Opus 5.5</p>
-          <p className="mt-3 text-sm text-muted">
-            Wavelets, the harbor, and every weapon here are original. No Nintendo characters, names, or assets. Geometry, ink, and sound are generated in the browser.
+        <BackButton onBack={onBack} />
+        <h2 className="mt-2 font-display text-4xl">ئويۇن ھەققىدە</h2>
+        <section className="panel p-5 leading-ug">
+          <p className="font-display text-2xl text-orange">سىياھ دولقۇنى: زېمىن جېڭى</p>
+          <p className="mt-3">4 گە 4 زېمىن تالىشىش ئېتىش ئويۇنى — ئەسلىي ئىجادىيەت. Claude Opus 5.5 بىلەن ياسالدى.</p>
+          <p className="mt-3 text-sm leading-ug text-muted">
+            دولقۇنچاقلار، پورت ۋە بارلىق قوراللار ئەسلىي ئىجادىيەت. Nintendo نىڭ ھېچقانداق پېرسوناژى، ئىسمى ياكى ماتېرىيالى ئىشلىتىلمىدى. شەكىل، سىياھ ۋە
+            ئاۋازلارنىڭ ھەممىسى توركۆرگۈچتە ھاسىل قىلىنىدۇ.
           </p>
           <p className="mt-4 font-display text-sm text-sun">v1.0.0</p>
         </section>
@@ -536,8 +589,8 @@ function Hud({
   onMenu: () => void;
   onAgain: () => void;
 }) {
-  const subName = SUBS.find((s) => s.id === hud.sub)?.name ?? "Sub";
-  const spName = SPECIALS.find((s) => s.id === hud.specialId)?.name ?? "Special";
+  const subName = SUBS.find((s) => s.id === hud.sub)?.name ?? "قوشۇمچە";
+  const spName = SPECIALS.find((s) => s.id === hud.specialId)?.name ?? "ئالاھىدە";
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       <div
@@ -549,37 +602,41 @@ function Hud({
         }}
       />
       <div className="absolute top-3 right-3 left-3 flex items-start justify-between gap-3">
-        <div className="rounded-sticker bg-navy/80 px-3 py-2">
-          <p className="font-display text-xs tracking-widest text-orange">ORANGE</p>
-          <p className="font-display text-2xl">{Math.round(hud.orange * 100)}%</p>
+        <div className="rounded-sticker bg-navy/80 px-3 py-1">
+          <p className="font-display text-sm text-orange">ئاپېلسىن</p>
+          <p className="font-display text-2xl leading-8">{Math.round(hud.orange * 100)}%</p>
         </div>
         <div className="flex flex-col items-center">
           <p className="font-display text-3xl text-foam">{clock(hud.time)}</p>
           <div className="mt-1 flex h-3 w-40 overflow-hidden rounded-full bg-navy md:w-64">
             <span className="bg-orange" style={{ width: `${hud.orange * 100}%` }} />
-            <span className="ml-auto bg-violet" style={{ width: `${hud.blue * 100}%` }} />
+            <span className="ms-auto bg-violet" style={{ width: `${hud.blue * 100}%` }} />
           </div>
         </div>
-        <div className="rounded-sticker bg-navy/80 px-3 py-2 text-right">
-          <p className="font-display text-xs tracking-widest text-violet">VIOLET</p>
-          <p className="font-display text-2xl">{Math.round(hud.blue * 100)}%</p>
+        <div className="rounded-sticker bg-navy/80 px-3 py-1 text-end">
+          <p className="font-display text-sm text-violet">بىنەپشە</p>
+          <p className="font-display text-2xl leading-8">{Math.round(hud.blue * 100)}%</p>
         </div>
       </div>
 
-      <button type="button" className="pointer-events-auto absolute top-20 right-3 flex h-11 items-center gap-2 rounded-sticker bg-foam px-3 font-display text-navy" onClick={onPause}>
-        <Pause className="size-4" /> Pause
-      </button>
+      <InkButton
+        className="pointer-events-auto absolute top-20 right-3 h-11 ps-1.5 pe-3 text-base"
+        icon={<Pause className="size-4" />}
+        onClick={onPause}
+      >
+        توختىتىش
+      </InkButton>
 
       <div className="absolute top-24 left-3 flex max-w-xs flex-col gap-1">
         {hud.feed.map((line) => (
-          <p key={line.id} className="rounded-sticker bg-navy/75 px-2 py-1 text-sm">
+          <p key={line.id} className="rounded-sticker bg-navy/75 px-2 py-0.5 text-sm leading-7">
             {line.text}
           </p>
         ))}
       </div>
 
       {hud.banner ? (
-        <p className="absolute top-1/3 left-1/2 -translate-x-1/2 font-display text-5xl text-sun md:text-6xl">{hud.banner}</p>
+        <p className="absolute top-1/3 left-1/2 -translate-x-1/2 font-display text-5xl whitespace-nowrap text-sun md:text-6xl">{hud.banner}</p>
       ) : null}
 
       {hud.countdown > 0 && hud.phase !== "ended" ? (
@@ -588,7 +645,7 @@ function Hud({
 
       {hud.respawn > 0 ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-navy/45">
-          <p className="font-display text-2xl">Back in the swim</p>
+          <p className="font-display text-2xl">دولقۇنغا قايتىۋاتىسىز</p>
           <p className="font-display text-7xl text-orange">{Math.ceil(hud.respawn)}</p>
         </div>
       ) : null}
@@ -604,10 +661,12 @@ function Hud({
         />
       </div>
 
-      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-36" : "bottom-4"} md:w-64`}>
-        <div className="mb-2 flex items-center gap-2 text-xs text-foam">
+      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72`}>
+        <div className="mb-2 flex items-center gap-2 text-sm whitespace-nowrap text-foam">
           <span>{weaponById(hud.weapon).name}</span>
+          <span className="text-muted">·</span>
           <span className="text-muted">{subName}</span>
+          <span className="text-muted">·</span>
           <span className={hud.special >= 1 ? "text-sun" : "text-muted"}>{spName}</span>
         </div>
         <div className="flex items-end gap-2">
@@ -618,29 +677,46 @@ function Hud({
             <div className="h-full bg-violet" style={{ width: `${hud.special * 100}%` }} />
           </div>
         </div>
-        {!touch ? <p className="mt-2 text-center text-xs text-foam/80">Shift swim · RMB sub · F special</p> : null}
+        {!touch ? (
+          <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-sm text-foam/85">
+            {[
+              ["Shift", "ئۈزۈش"],
+              ["ئوڭ چېكىش", "قوشۇمچە"],
+              ["F", "ئالاھىدە"],
+            ].map(([key, action]) => (
+              <span key={key} className="flex items-center gap-1.5 whitespace-nowrap">
+                <Kbd>{key}</Kbd>
+                {action}
+              </span>
+            ))}
+          </p>
+        ) : null}
       </div>
 
       {hud.paused ? (
         <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-navy/70 p-4">
-          <div className="panel flex w-full max-w-sm flex-col gap-3 p-5">
-            <h2 className="font-display text-4xl">Paused</h2>
-            <button type="button" className="sticker h-12 rounded-sticker bg-orange font-display text-lg text-navy" onClick={onResume}>
-              Resume
-            </button>
-            <button type="button" className="sticker h-12 rounded-sticker bg-foam font-display text-lg text-navy" onClick={onMenu}>
-              Quit to menu
-            </button>
+          <div className="panel flex w-full max-w-sm flex-col gap-5 p-5 pb-8">
+            <h2 className="font-display text-4xl">توختىتىلدى</h2>
+            <InkButton tone="orange" className="h-12 ps-1.5 pe-4 text-lg" icon={<Play className="size-4" />} onClick={onResume}>
+              داۋاملاشتۇرۇش
+            </InkButton>
+            <InkButton className="h-12 ps-1.5 pe-4 text-lg" icon={<House className="size-4" />} onClick={onMenu}>
+              باش بەتكە قايتىش
+            </InkButton>
           </div>
         </div>
       ) : null}
 
       {hud.phase === "ended" && hud.result ? (
         <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-navy/72 p-4">
-          <div className="panel w-full max-w-md p-6 text-center">
-            <p className="font-display text-sm tracking-widest text-sun">MATCH OVER</p>
-            <h2 className="mt-1 font-display text-4xl">
-              {hud.result.winner === "orange" ? "Orange takes the turf" : hud.result.winner === "violet" ? "Violet takes the turf" : "Dead even"}
+          <div className="panel w-full max-w-md p-6 pb-9 text-center">
+            <p className="font-display text-base text-sun">مۇسابىقە ئاخىرلاشتى</p>
+            <h2 className="mt-1 font-display text-4xl leading-[1.5]">
+              {hud.result.winner === "orange"
+                ? "ئاپېلسىن گۇرۇپپا زېمىننى ئالدى"
+                : hud.result.winner === "violet"
+                  ? "بىنەپشە گۇرۇپپا زېمىننى ئالدى"
+                  : "تەڭ-تەڭ"}
             </h2>
             <p className="mt-3 font-display text-3xl">
               <span className="text-orange">{Math.round(hud.result.orange * 100)}%</span>
@@ -648,15 +724,15 @@ function Hud({
               <span className="text-violet">{Math.round(hud.result.blue * 100)}%</span>
             </p>
             <p className="mt-2 text-sm text-muted">
-              You splatted {hud.result.splats} · washed out {hud.result.deaths}
+              سىز {hud.result.splats} رەقىبنى چاچرىتتىڭىز · {hud.result.deaths} قېتىم يۇيۇلدىڭىز
             </p>
-            <div className="mt-5 flex flex-col gap-3">
-              <button type="button" className="sticker h-12 rounded-sticker bg-orange font-display text-lg text-navy" onClick={onAgain}>
-                Play again
-              </button>
-              <button type="button" className="sticker h-12 rounded-sticker bg-foam font-display text-lg text-navy" onClick={onMenu}>
-                Menu
-              </button>
+            <div className="mt-5 flex flex-col gap-5">
+              <InkButton tone="orange" className="h-12 ps-1.5 pe-4 text-lg" icon={<RotateCcw className="size-4" />} onClick={onAgain}>
+                يەنە ئويناش
+              </InkButton>
+              <InkButton className="h-12 ps-1.5 pe-4 text-lg" icon={<House className="size-4" />} onClick={onMenu}>
+                باش بەت
+              </InkButton>
             </div>
           </div>
         </div>
@@ -732,22 +808,35 @@ function TouchControls({ input }: { input: InputState }) {
       >
         <div ref={knob} className="absolute top-1/2 left-1/2 h-14 w-14 rounded-full bg-foam" style={{ transform: "translate(-50%, -50%)" }} />
       </div>
-      <div className="absolute right-4 bottom-6 grid grid-cols-2 gap-2">
-        <HoldButton label="Swim" icon={<Waves className="size-5" />} onHold={(v) => (input.swim = v)} />
-        <HoldButton label="Jump" icon={<Zap className="size-5" />} onHold={(v) => (input.jump = v)} />
-        <HoldButton label="Sub" icon={<Bomb className="size-5" />} onHold={(v) => (input.bomb = v)} />
-        <HoldButton label="Special" icon={<ShowerHead className="size-5" />} onHold={(v) => (input.special = v)} />
-        <HoldButton label="Shoot" icon={<Crosshair className="size-5" />} wide onHold={(v) => (input.fire = v)} />
+      <div className="absolute right-4 bottom-6 grid grid-cols-2 gap-x-2 gap-y-3">
+        <HoldButton label="ئۈزۈش" icon={<Waves className="size-4" />} onHold={(v) => (input.swim = v)} />
+        <HoldButton label="سەكرەش" icon={<Zap className="size-4" />} onHold={(v) => (input.jump = v)} />
+        <HoldButton label="قوشۇمچە" icon={<Bomb className="size-4" />} onHold={(v) => (input.bomb = v)} />
+        <HoldButton label="ئالاھىدە" tone="violet" icon={<ShowerHead className="size-4" />} onHold={(v) => (input.special = v)} />
+        <HoldButton label="ئېتىش" tone="orange" icon={<Crosshair className="size-5" />} wide onHold={(v) => (input.fire = v)} />
       </div>
     </div>
   );
 }
 
-function HoldButton({ label, icon, onHold, wide }: { label: string; icon: ReactNode; onHold: (v: boolean) => void; wide?: boolean }) {
+function HoldButton({
+  label,
+  icon,
+  onHold,
+  wide,
+  tone = "foam",
+}: {
+  label: string;
+  icon: ReactNode;
+  onHold: (v: boolean) => void;
+  wide?: boolean;
+  tone?: Tone;
+}) {
   return (
-    <button
-      type="button"
-      className={`flex h-14 items-center justify-center gap-1 rounded-sticker bg-foam font-display text-navy ${wide ? "col-span-2" : ""}`}
+    <InkButton
+      tone={tone}
+      icon={icon}
+      className={`h-12 gap-1.5 ps-1.5 pe-2.5 text-sm ${wide ? "col-span-2 justify-center text-base" : "w-[6.5rem] justify-start"}`}
       onPointerDown={(e) => {
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -756,8 +845,7 @@ function HoldButton({ label, icon, onHold, wide }: { label: string; icon: ReactN
       onPointerUp={() => onHold(false)}
       onPointerCancel={() => onHold(false)}
     >
-      {icon}
       {label}
-    </button>
+    </InkButton>
   );
 }

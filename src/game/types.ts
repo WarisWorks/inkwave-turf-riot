@@ -75,9 +75,9 @@ export type WeaponInfo = {
 export const WEAPONS: WeaponInfo[] = [
   {
     id: "spritzer",
-    name: "Spritzer",
-    kind: "Shooter",
-    blurb: "A steady stream. Balanced range, ink, and fight.",
+    name: "پۈركۈگۈچ",
+    kind: "ئاتقۇچ",
+    blurb: "تۇراقلىق سىياھ ئېقىمى. ئارىلىق، سىياھ ۋە جەڭ كۈچى تەڭپۇڭ.",
     range: 0.62,
     damage: 0.55,
     fire: 0.88,
@@ -86,9 +86,9 @@ export const WEAPONS: WeaponInfo[] = [
   },
   {
     id: "roller",
-    name: "Swell Roller",
-    kind: "Roller",
-    blurb: "Push a wide wave, then flick it off a jump.",
+    name: "دولقۇن دومىلاتقۇچ",
+    kind: "دومىلاتقۇچ",
+    blurb: "كەڭ دولقۇننى ئالدىغا ئىتتىرىڭ، ئاندىن سەكرەپ تۇرۇپ چاچرىتىڭ.",
     range: 0.38,
     damage: 0.72,
     fire: 0.42,
@@ -97,9 +97,9 @@ export const WEAPONS: WeaponInfo[] = [
   },
   {
     id: "charger",
-    name: "Flint Charger",
-    kind: "Charger",
-    blurb: "Hold to charge. A full release cuts a long line.",
+    name: "چاقماق نىشانچى",
+    kind: "توپلىغۇچ",
+    blurb: "بېسىپ تۇرۇپ كۈچ توپلاڭ. تولۇق قويۇۋەتسىڭىز ئۇزۇن بىر سىزىق كېسىپ ئۆتىدۇ.",
     range: 0.96,
     damage: 0.98,
     fire: 0.26,
@@ -108,9 +108,9 @@ export const WEAPONS: WeaponInfo[] = [
   },
   {
     id: "blaster",
-    name: "Popper Blaster",
-    kind: "Blaster",
-    blurb: "Lob a burst that pops and soaks a wide patch.",
+    name: "پاقىلداق",
+    kind: "پارتلاتقۇچ",
+    blurb: "ئېگىز ئېتىلىپ پارتلايدىغان توپ — كەڭ دائىرىنى سىياھقا چىلايدۇ.",
     range: 0.7,
     damage: 0.8,
     fire: 0.4,
@@ -120,13 +120,13 @@ export const WEAPONS: WeaponInfo[] = [
 ];
 
 export const SUBS: { id: SubId; name: string; blurb: string }[] = [
-  { id: "pop-bomb", name: "Pop Bomb", blurb: "Arc a bomb that bursts into a thick puddle." },
-  { id: "ink-beacon", name: "Ink Beacon", blurb: "Plant a sprinkler that paints around itself." },
+  { id: "pop-bomb", name: "سىياھ بومبىسى", blurb: "بومبىنى ئەگمە ئېتىڭ — ئۇ قويۇق سىياھ كۆلچىكىگە ئايلىنىدۇ." },
+  { id: "ink-beacon", name: "سىياھ مايىكى", blurb: "ئەتراپىنى ئۆزلۈكىدىن بويايدىغان چاچقۇچنى ئورنىتىڭ." },
 ];
 
 export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
-  { id: "tempest", name: "Ink Tempest", blurb: "A rain cloud soaks a big circle of turf." },
-  { id: "reef-rush", name: "Reef Rush", blurb: "Sprint anywhere and leave a painted wake." },
+  { id: "tempest", name: "سىياھ بورىنى", blurb: "يامغۇر بۇلۇتى چوڭ بىر دائىرە زېمىننى سىياھقا چىلايدۇ." },
+  { id: "reef-rush", name: "مەرجان يۈگۈرۈشى", blurb: "خالىغان يەرگە ئۇچقاندەك يۈگۈرۈپ، ئارقىڭىزدا بويالغان ئىز قالدۇرۇڭ." },
 ];
 
 export function weaponById(id: WeaponId): WeaponInfo {

@@ -1,17 +1,40 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "ALKATIP Basma";
+  src: url("https://db.onlinewebfonts.com/t/3c16518f40da2fc2901f37666c0556a7.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/3c16518f40da2fc2901f37666c0556a7.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/3c16518f40da2fc2901f37666c0556a7.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-display: "Fredoka", "Trebuchet MS", "Segoe UI", sans-serif;
-  --font-sans: "Outfit", "Trebuchet MS", "Segoe UI", sans-serif;
+  /* Fredoka only fills in Latin letters / digits if ALKATIP Basma lacks them. */
+  --font-display: "ALKATIP Basma", "Fredoka", serif;
+  --font-sans: "ALKATIP Basma", "Fredoka", serif;
+  --leading-ug: 2.2;
   --color-navy: #102033;
   --color-navy-2: #1a3352;
   --color-foam: #f4f7fb;
+  --color-foam-deep: #aebdd1;
   --color-muted: #9eb0c7;
   --color-orange: #ff6a1a;
+  --color-orange-deep: #c4470a;
   --color-violet: #5b4dff;
+  --color-violet-deep: #3a2dc2;
   --color-sun: #ffe56a;
   --color-sea: #128fb0;
   --radius-sticker: 1.15rem;
+}
+
+:root {
+  /* Solid shapes used as masks, so each one can be tinted with any ink color. */
+  --ink-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 20' preserveAspectRatio='none'%3E%3Cpath d='M0 6Q20-2 40 6T80 6V20H0Z'/%3E%3C/svg%3E");
+  --ink-drips: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 30'%3E%3Cpath d='M0 0H200V5L181.4 5C177.4 5 175.65 7 175.65 10L175.65 10.49A3 3 0 1 1 172.35 10.49L172.35 10C172.35 7 170.6 5 166.6 5L139.64 5C135.64 5 133.19 7 133.19 10L133.19 18.66A5.8 5.8 0 1 1 126.81 18.66L126.81 10C126.81 7 124.36 5 120.36 5L87.88 5C83.88 5 81.98 7 81.98 10L81.98 11.49A3.6 3.6 0 1 1 78.02 11.49L78.02 10C78.02 7 76.12 5 72.12 5L43 5C39 5 36.75 7 36.75 10L36.75 16.82A5 5 0 1 1 31.25 16.82L31.25 10C31.25 7 29 5 25 5L0 5Z'/%3E%3Ccircle cx='151' cy='25' r='2.2'/%3E%3Ccircle cx='57' cy='21' r='1.4'/%3E%3C/svg%3E");
+  --ink-splat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 3C23 3 23.5 7 26 7.5 29 8 31 4 33.5 6 36 8 33 11 34 13.5 35 16 39 16.5 38.5 20 38 23 34 22.5 33.5 25.5 33 28.5 36.5 31 34 33.5 31.5 36 29 32.5 26 33.5 23 34.5 23 38 20 38 17 38 16.5 34 14 33.5 11 33 9 36.5 6.5 34 4 31.5 7.5 29 6.5 26 5.5 23 1.5 23 1.5 20 1.5 17 5.5 16.5 6.5 14 7.5 11 4 8.5 6.5 6 9 3.5 11.5 7.5 14 6.5 16.5 5.5 17 3 20 3Z'/%3E%3Ccircle cx='37' cy='4' r='2'/%3E%3Ccircle cx='3.5' cy='37' r='1.6'/%3E%3Ccircle cx='38.4' cy='30.5' r='1.2'/%3E%3C/svg%3E");
+  --ink-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 
 @layer base {
@@ -33,18 +56,21 @@
   input:focus-visible,
   [role="button"]:focus-visible {
     outline: 3px solid var(--color-sun);
-    outline-offset: 2px;
+    outline-offset: 3px;
+  }
+
+  input[type="range"],
+  input[type="checkbox"] {
+    accent-color: var(--color-orange);
   }
 }
 
 @layer components {
-  .sticker {
-    box-shadow: 4px 4px 0 0 var(--color-navy);
-  }
-
-  .sticker:active:not(:disabled) {
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 0 var(--color-navy);
+  .alkatip-basma {
+    font-family: "ALKATIP Basma", serif;
+    direction: rtl;
+    unicode-bidi: embed;
+    line-height: 2.2;
   }
 
   .panel {
@@ -64,10 +90,305 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* ── Ink tones ─────────────────────────────────────────────── */
+  .ink-foam {
+    --ink: var(--color-foam);
+    --ink-deep: var(--color-foam-deep);
+    --ink-fg: var(--color-navy);
+  }
+  .ink-orange {
+    --ink: var(--color-orange);
+    --ink-deep: var(--color-orange-deep);
+    --ink-fg: var(--color-navy);
+  }
+  .ink-violet {
+    --ink: var(--color-violet);
+    --ink-deep: var(--color-violet-deep);
+    --ink-fg: var(--color-foam);
+  }
+
+  /* ── Ink button: blob face, rising ink wave, drips, hover splatter ── */
+  .ink-btn {
+    --drip-x: 78%;
+    --drip-flip: 1;
+    --drip-stretch: 1;
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    white-space: nowrap;
+    color: var(--ink-fg);
+    border-radius: 1.6rem 1.1rem 1.8rem 1.2rem / 1.2rem 1.7rem 1.1rem 1.6rem;
+    background:
+      radial-gradient(120% 75% at 78% -12%, rgb(255 255 255 / 0.55), transparent 58%),
+      var(--ink);
+    box-shadow:
+      inset 0 -0.28rem 0 0 color-mix(in srgb, var(--ink-deep) 75%, transparent),
+      0 0.35rem 0 0 var(--ink-deep),
+      0 0.6rem 0 0 rgb(6 14 26 / 0.55);
+    transition:
+      transform 200ms var(--ink-spring),
+      box-shadow 160ms ease,
+      filter 160ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ink level sloshing along the bottom of the face. */
+  .ink-btn-wave {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ink-deep);
+    opacity: 0.5;
+    mask: var(--ink-wave) 0 100% / 5rem 42% repeat-x;
+    pointer-events: none;
+  }
+
+  /* Drips hanging off the bottom ledge. */
+  .ink-btn::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset-inline: 12%;
+    top: calc(100% + 0.12rem);
+    height: 1.35rem;
+    background: var(--ink-deep);
+    mask: var(--ink-drips) var(--drip-x) 0 / auto 100% no-repeat;
+    transform: scale(var(--drip-flip), var(--drip-stretch));
+    transform-origin: top;
+    transition: transform 320ms var(--ink-spring);
+    pointer-events: none;
+  }
+
+  /* Splatter droplets that burst out on hover / focus. */
+  .ink-btn::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -0.65rem -0.95rem;
+    background:
+      radial-gradient(circle at 3% 28%, var(--ink) 0 0.24rem, transparent 0.28rem),
+      radial-gradient(circle at 8% 90%, var(--ink) 0 0.14rem, transparent 0.18rem),
+      radial-gradient(circle at 1% 62%, var(--ink) 0 0.1rem, transparent 0.14rem),
+      radial-gradient(circle at 97% 16%, var(--ink) 0 0.3rem, transparent 0.34rem),
+      radial-gradient(circle at 99.5% 58%, var(--ink) 0 0.13rem, transparent 0.17rem),
+      radial-gradient(circle at 90% 3%, var(--ink) 0 0.11rem, transparent 0.15rem);
+    opacity: 0;
+    transform: scale(0.8);
+    transition:
+      opacity 160ms ease,
+      transform 320ms var(--ink-spring);
+    pointer-events: none;
+  }
+
+  .ink-btn:nth-child(even) {
+    --drip-x: 22%;
+    --drip-flip: -1;
+  }
+  .ink-btn:nth-child(3n) {
+    --drip-x: 50%;
+  }
+
+  .ink-btn:hover:not(:disabled),
+  .ink-btn:focus-visible {
+    --drip-stretch: 1.3;
+    transform: translateY(-2px) rotate(-0.6deg);
+    animation: ink-wobble 1.1s ease-in-out infinite alternate;
+  }
+  .ink-btn:hover:not(:disabled)::after,
+  .ink-btn:focus-visible::after {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .ink-btn:hover:not(:disabled) .ink-btn-wave,
+  .ink-btn:focus-visible .ink-btn-wave {
+    animation: ink-flow 1.5s linear infinite;
+  }
+
+  .ink-btn:active:not(:disabled) {
+    --drip-stretch: 0.7;
+    transform: translateY(0.3rem) scale(0.98, 0.96);
+    box-shadow:
+      inset 0 -0.2rem 0 0 color-mix(in srgb, var(--ink-deep) 75%, transparent),
+      0 0.05rem 0 0 var(--ink-deep),
+      0 0.2rem 0 0 rgb(6 14 26 / 0.55);
+  }
+
+  .ink-btn:disabled {
+    cursor: not-allowed;
+    filter: saturate(0.45) brightness(0.88);
+  }
+  .ink-btn[aria-busy="true"] {
+    cursor: progress;
+  }
+  .ink-btn[aria-busy="true"] .ink-btn-wave {
+    opacity: 0.8;
+    animation: ink-flow 1.1s linear infinite;
+  }
+
+  /* Splat-shaped icon badge. */
+  .ink-btn-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 1.95em;
+    height: 1.95em;
+    border-radius: 58% 42% 55% 45% / 45% 55% 42% 58%;
+    background: var(--color-navy);
+    color: var(--ink);
+    transition:
+      transform 320ms var(--ink-spring),
+      border-radius 320ms ease;
+  }
+  .ink-btn:hover:not(:disabled) .ink-btn-icon {
+    transform: rotate(-10deg) scale(1.1);
+    border-radius: 45% 55% 42% 58% / 58% 42% 55% 45%;
+  }
+
+  /* Hero call-to-action: the ink keeps moving even at rest. */
+  .ink-btn-hero .ink-btn-wave {
+    animation: ink-flow 2.6s linear infinite;
+  }
+  .ink-btn-hero::before {
+    height: 1.7rem;
+  }
+
+  .ink-chip {
+    border-radius: 0.8rem 0.5rem 0.9rem 0.55rem / 0.55rem 0.8rem 0.5rem 0.9rem;
+    background: var(--color-navy);
+    padding: 0 0.6rem;
+    font-size: 0.55em;
+    line-height: 1.9;
+    color: var(--ink);
+  }
+
+  /* ── Ink option cards (loadout, graphics toggle) ─────────────── */
+  .ink-option {
+    position: relative;
+    isolation: isolate;
+    border: 2px dashed color-mix(in srgb, var(--color-foam) 32%, transparent);
+    border-radius: 1.4rem 1rem 1.5rem 1.1rem / 1.1rem 1.4rem 1rem 1.5rem;
+    background: color-mix(in srgb, var(--color-navy) 65%, transparent);
+    text-align: start;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 240ms var(--ink-spring);
+  }
+  .ink-option::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ink);
+    opacity: 0;
+    mask: var(--ink-wave) 0 100% / 5rem 48% repeat-x;
+    transition: opacity 200ms ease;
+    pointer-events: none;
+  }
+  .ink-option:hover {
+    border-color: color-mix(in srgb, var(--color-foam) 65%, transparent);
+    transform: translateY(-2px);
+  }
+  .ink-option:hover::before {
+    opacity: 0.12;
+  }
+  .ink-option:active {
+    transform: translateY(1px) scale(0.99);
+  }
+  .ink-option[aria-pressed="true"] {
+    border-style: solid;
+    border-color: var(--ink);
+    background-color: var(--color-navy-2);
+    box-shadow: 0 0.3rem 0 0 color-mix(in srgb, var(--ink) 45%, black);
+  }
+  .ink-option[aria-pressed="true"]::before {
+    opacity: 0.3;
+    animation: ink-flow 3.2s linear infinite;
+  }
+
+  .ink-splat {
+    position: absolute;
+    top: -0.8rem;
+    inset-inline-end: -0.7rem;
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    isolation: isolate;
+    color: var(--ink-fg);
+    animation: ink-pop 380ms var(--ink-spring);
+  }
+  .ink-splat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--ink);
+    mask: var(--ink-splat) center / contain no-repeat;
+  }
+
+  /* ── Keycaps ───────────────────────────────────────────────── */
+  .ink-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9rem;
+    height: 1.75rem;
+    padding: 0 0.55rem;
+    border-radius: 0.75rem 0.45rem 0.8rem 0.5rem / 0.5rem 0.75rem 0.45rem 0.8rem;
+    background: var(--color-foam);
+    box-shadow: 0 0.2rem 0 0 var(--color-foam-deep);
+    color: var(--color-navy);
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+}
+
+@keyframes ink-flow {
+  to {
+    mask-position: -5rem 100%;
+  }
+}
+
+@keyframes ink-wobble {
+  to {
+    border-radius: 1.2rem 1.8rem 1.1rem 1.7rem / 1.7rem 1.1rem 1.6rem 1.2rem;
+  }
+}
+
+@keyframes ink-pop {
+  from {
+    transform: scale(0.2) rotate(-40deg);
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sticker:active:not(:disabled) {
+  .ink-btn,
+  .ink-btn::before,
+  .ink-btn::after,
+  .ink-btn-icon,
+  .ink-option,
+  .ink-btn-wave,
+  .ink-option::before,
+  .ink-splat {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ink-btn:hover:not(:disabled),
+  .ink-btn:focus-visible,
+  .ink-btn:active:not(:disabled),
+  .ink-option:hover,
+  .ink-option:active {
     transform: none;
   }
 }

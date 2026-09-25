@@ -234,7 +234,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
   } catch {
-    bridge.onError("This browser could not start the 3D match.");
+    bridge.onError("بۇ توركۆرگۈچ 3D مۇسابىقىنى قوزغىتالمىدى.");
     return () => {};
   }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -592,7 +592,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function writeName(kid: Kid, text: string, team: Team) {
     const g = kid.nameCanvas.getContext("2d")!;
     g.clearRect(0, 0, 256, 64);
-    g.font = "700 36px Fredoka, Trebuchet MS, sans-serif";
+    g.font = '34px "ALKATIP Basma", Fredoka, serif';
+    g.direction = "rtl";
     g.textAlign = "center";
     g.fillStyle = team === 1 ? "#ff6a1a" : "#8d86ff";
     g.strokeStyle = "#102033";
@@ -685,13 +686,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   const BOTS: { name: string; team: Team; weapon: WeaponId }[] = [
-    { name: "Miso", team: 1, weapon: "spritzer" },
-    { name: "Pebble", team: 1, weapon: "roller" },
-    { name: "Kite", team: 1, weapon: "blaster" },
-    { name: "Suki", team: 2, weapon: "spritzer" },
-    { name: "Juno", team: 2, weapon: "charger" },
-    { name: "Reef", team: 2, weapon: "blaster" },
-    { name: "Nori", team: 2, weapon: "roller" },
+    { name: "ئايگۈل", team: 1, weapon: "spritzer" },
+    { name: "باتۇر", team: 1, weapon: "roller" },
+    { name: "دىلشات", team: 1, weapon: "blaster" },
+    { name: "نىگار", team: 2, weapon: "spritzer" },
+    { name: "ئەركىن", team: 2, weapon: "charger" },
+    { name: "مەرۋە", team: 2, weapon: "blaster" },
+    { name: "ئالىم", team: 2, weapon: "roller" },
   ];
 
   const actors: Actor[] = [];
@@ -735,10 +736,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       mesh: makeKid(team, name),
     };
   }
-  actors.push(blankActor("Waris", 1, true, "spritzer"));
+  actors.push(blankActor("ۋارىس", 1, true, "spritzer"));
   BOTS.forEach((b) => actors.push(blankActor(b.name, b.team, false, b.weapon)));
-  const hero = makeKid(1, "Waris");
+  const hero = makeKid(1, "ۋارىس");
   hero.root.visible = false;
+
+  // Name tags are drawn on canvas, which never triggers a web-font load on its own.
+  // Load ALKATIP Basma explicitly, then redraw every tag with the real letterforms.
+  document.fonts?.load('34px "ALKATIP Basma"', "ئۇيغۇر").then(() => {
+    if (dead) return;
+    actors.forEach((a) => writeName(a.mesh, a.name, a.team));
+    writeName(hero, bridge.config.current.name.trim().slice(0, 16) || "ۋارىس", 1);
+  }, () => {});
 
   const MAXP = 72;
   const shotGeo = new THREE.SphereGeometry(0.16, 8, 6);
@@ -1037,20 +1046,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     shake = Math.min(1, shake + (target.isPlayer || by?.isPlayer ? 0.7 : 0.25));
     audio.thud();
     if (how === "water") {
-      pushFeed(`${target.isPlayer ? "You" : target.name} washed out`);
-      if (target.isPlayer) setBanner("WASHED OUT");
+      pushFeed(target.isPlayer ? "سىز سۇغا چۈشۈپ كەتتىڭىز" : `${target.name} سۇغا چۈشۈپ كەتتى`);
+      if (target.isPlayer) setBanner("سۇغا چۈشتىڭىز!");
     } else if (by) {
       by.splats += 1;
       if (by.isPlayer) {
         by.special = Math.min(100, by.special + 28);
-        setBanner("CLEAN WIPE");
+        setBanner("پاكىز زەربە!");
       }
-      if (target.isPlayer) setBanner("SPLATTED");
-      const kn = by.isPlayer ? "You" : by.name;
-      const vn = target.isPlayer ? "You" : target.name;
-      pushFeed(`${vn} was splatted by ${kn}`);
+      if (target.isPlayer) setBanner("چاچرىتىلدىڭىز!");
+      const kn = by.isPlayer ? "سىز" : by.name;
+      pushFeed(target.isPlayer ? `سىز ${kn} تەرىپىدىن چاچرىتىلدىڭىز` : `${target.name} ${kn} تەرىپىدىن چاچرىتىلدى`);
     } else {
-      pushFeed(`${target.isPlayer ? "You" : target.name} was splatted`);
+      pushFeed(target.isPlayer ? "سىز چاچرىتىلدىڭىز" : `${target.name} چاچرىتىلدى`);
     }
   }
 
@@ -1265,7 +1273,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     actor.special = 0;
     if (actor.specialId === "reef-rush") {
       actor.rush = 6;
-      setBanner(actor.isPlayer ? "REEF RUSH" : "");
+      setBanner(actor.isPlayer ? "مەرجان يۈگۈرۈشى" : "");
       audio.chime();
       return;
     }
@@ -1287,7 +1295,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       mat.color.copy(actor.team === 1 ? colO : colV);
     });
     if (actor.isPlayer) {
-      setBanner("INK TEMPEST");
+      setBanner("سىياھ بورىنى");
       audio.chime();
     }
   }
@@ -1690,7 +1698,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
     const p = actors[0];
     result = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths };
-    setBanner(winner === "orange" ? "TURF TAKEN" : winner === "violet" ? "TURF LOST" : "DEAD EVEN");
+    setBanner(winner === "orange" ? "زېمىن بىزنىڭ!" : winner === "violet" ? "زېمىن قولدىن كەتتى" : "تەڭ-تەڭ");
     document.exitPointerLock?.();
     if (!resultSent) {
       resultSent = true;
@@ -1724,7 +1732,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     decalCursor = 0;
     decals.count = 0;
     const p = actors[0];
-    p.name = cfg.name.trim().slice(0, 16) || "Waris";
+    p.name = cfg.name.trim().slice(0, 16) || "ۋارىس";
     p.weapon = cfg.weapon;
     p.sub = cfg.sub;
     p.specialId = cfg.special;
@@ -1765,7 +1773,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     hero.root.visible = false;
     audio.unlock();
     audio.chime();
-    setBanner("FRESH");
+    setBanner("جەڭ باشلاندى!");
     publish(true);
   }
 
@@ -1791,7 +1799,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     hero.root.visible = true;
     hero.root.position.set(0, hy, -24);
     setWeapon(hero, cfg.weapon);
-    writeName(hero, cfg.name.trim().slice(0, 16) || "Waris", 1);
+    writeName(hero, cfg.name.trim().slice(0, 16) || "ۋارىس", 1);
     actors.forEach((a) => (a.mesh.root.visible = false));
   }
 
@@ -2245,7 +2253,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const f0 = yawForward(0);
   const r0 = yawRight(0);
   if (Math.abs(f0.z + 1) > 1e-4 || Math.abs(r0.x - 1) > 1e-4) {
-    bridge.onError("Control basis failed to initialize.");
+    bridge.onError("باشقۇرۇش سىستېمىسىنى قوزغىتىش مەغلۇپ بولدى.");
   }
 
   resize();
