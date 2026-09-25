@@ -33,6 +33,32 @@ VITE_MATCH_LEN=75 npm run dev
 
 Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Tempest or Reef Rush.
 
+## Stages
+
+Pick a stage from **مەيدان تاللاش** in the menu; the menu backdrop switches to it live.
+
+| Stage | Layout |
+|---|---|
+| پورت · Harbor | The original map. A water channel splits the middle; cross on the two docks or the central platform. |
+| قەشقەر بازىرى · Kashgar Bazaar | Tight market lanes of awning stalls, gate arches, domed towers, caravanserai rooftops, and a tiled fountain in the centre. |
+| تەكلىماكان ۋاھەسى · Taklamakan Oasis | Open sand with walk-up dune terraces, mud-brick ruins, a hilltop fort, and a palm-ringed pond. |
+| تۇرپان ئۈزۈمزارلىقى · Turpan Vineyard | Grape-trellis lanes, a karez canal with five crossings, grape-drying houses, and the Flaming Mountains on the horizon. |
+
+Levels are plain data in `src/game/levels.ts` (boxes, stairs, trees, domes, water rects, spawns, colours). The engine builds them at runtime and the stage screen draws its map previews from the same data. Maps are point-symmetric via `sym()`, so both teams get the same layout. Bots cross channels at the listed `crossings` and walk around `pools`.
+
+## Characters
+
+Choose in **قورال-جابدۇق** (loadout); the model spins in the middle of the screen. Each has one small perk, and the bots use them too.
+
+| Character | Look | Perk |
+|---|---|---|
+| دولقۇنچاق | Ink-tentacle hair | Balanced |
+| دوپپىلىق يىگىت | Black doppa with white badam motifs | Run speed +8% |
+| ئۆرۈمە چاچلىق قىز | Crimson doppa and long braids | Swim speed +12% |
+| تەلپەكلىك باتۇر | Sheepskin telpek | Takes 10% less damage |
+| ئەتلەس ياغلىقلىق قىز | Etles-silk headscarf | Special charges 15% faster |
+| دۇتارچى | Doppa and a dutar on the back | Ink refills 15% faster |
+
 ## v1.1 gameplay
 
 - **Difficulty**: Easy / Normal / Hard in Settings. Only the Violet bots scale (speed, reaction, aim spread, fire rate, damage to you, special charge); your teammates always play Normal.

@@ -8,11 +8,13 @@ import {
   Crosshair,
   House,
   ListOrdered,
+  Map as MapIcon,
   Pause,
   Play,
   Radio,
   RotateCcw,
   ScrollText,
+  Shirt,
   Settings,
   ShowerHead,
   Sparkles,
@@ -21,18 +23,25 @@ import {
   Zap,
 } from "lucide-react";
 import type { EngineApi } from "../game/engine";
+import { LEVEL_DEFS, MAP, waterRects } from "../game/levels";
 import { DEFAULT_SAVE, levelInfo, loadSave, matchXp, rankTitle, writeSave, type SaveData } from "../game/persist";
 import {
+  CHARACTERS,
   DIFFICULTIES,
+  LEVELS,
+  characterById,
+  levelById,
   SPECIALS,
   SUBS,
   WEAPONS,
   mvpIndex,
   weaponById,
   type BoardRow,
+  type CharacterId,
   type Difficulty,
   type HudSnap,
   type InputState,
+  type LevelId,
   type LiveConfig,
   type Quality,
   type SpecialId,
@@ -40,12 +49,12 @@ import {
   type WeaponId,
 } from "../game/types";
 
-type Screen = "menu" | "loadout" | "settings" | "howto" | "credits" | "play";
+type Screen = "menu" | "loadout" | "stage" | "settings" | "howto" | "credits" | "play";
 
 /** What the last match earned, shown on the results screen. */
 type Reward = { xp: number; record: boolean; levelUp: number };
 
-const VERSION = "v1.1.0";
+const VERSION = "v1.2.0";
 
 function difficultyName(id: Difficulty) {
   return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";
@@ -149,6 +158,8 @@ export function InkWaveApp() {
     invertY: DEFAULT_SAVE.invertY,
     quality: DEFAULT_SAVE.quality,
     difficulty: DEFAULT_SAVE.difficulty,
+    level: DEFAULT_SAVE.level,
+    character: DEFAULT_SAVE.character,
     input: inputRef.current,
   });
   const onHudRef = useRef<(h: HudSnap) => void>(() => {});
@@ -174,6 +185,8 @@ export function InkWaveApp() {
     invertY: save.invertY,
     quality: save.quality,
     difficulty: save.difficulty,
+    level: save.level,
+    character: save.character,
     input: inputRef.current,
   };
   onHudRef.current = setHud;
@@ -287,6 +300,17 @@ export function InkWaveApp() {
           onWeapon={(weaponId) => patch({ weapon: weaponId })}
           onSub={(sub) => patch({ sub })}
           onSpecial={(special) => patch({ special })}
+          onCharacter={(character) => patch({ character })}
+        />
+      ) : null}
+      {screen === "stage" ? (
+        <StageScreen
+          save={save}
+          onBack={() => setScreen("menu")}
+          onLevel={(level) => {
+            patch({ level });
+            apiRef.current?.setLevel(level);
+          }}
         />
       ) : null}
       {screen === "settings" ? <SettingsScreen save={save} onBack={() => setScreen("menu")} onChange={patch} /> : null}
@@ -310,11 +334,11 @@ export function InkWaveApp() {
 
       {playing && touchUi && hud && !hud.paused && hud.phase !== "ended" ? <TouchControls input={inputRef.current} /> : null}
 
-      {playing ? (
+      {playing && hud?.phase !== "ended" ? (
         <p className="pointer-events-none absolute top-[4.6rem] left-1/2 z-40 -translate-x-1/2 rounded-full bg-navy px-2 py-0.5 font-display text-xs text-foam">
           {VERSION}
         </p>
-      ) : (
+      ) : playing ? null : (
         <p className="pointer-events-none absolute bottom-3 left-3 z-40 rounded-full bg-navy px-2 py-1 font-display text-xs text-foam">{VERSION}</p>
       )}
     </div>
@@ -337,7 +361,8 @@ function Menu({
   onName: (name: string) => void;
 }) {
   const buttons: { label: string; screen: Screen; icon: ReactNode }[] = [
-    { label: "قورال-جابدۇق", screen: "loadout", icon: <Crosshair className="size-5" /> },
+    { label: "قورال-جابدۇق", screen: "loadout", icon: <Shirt className="size-5" /> },
+    { label: "مەيدان تاللاش", screen: "stage", icon: <MapIcon className="size-5" /> },
     { label: "تەڭشەك", screen: "settings", icon: <Settings className="size-5" /> },
     { label: "ئويناش ئۇسۇلى", screen: "howto", icon: <CircleHelp className="size-5" /> },
     { label: "ئويۇن ھەققىدە", screen: "credits", icon: <ScrollText className="size-5" /> },
@@ -355,7 +380,7 @@ function Menu({
               <span className="absolute -bottom-1 left-2 h-4 w-4 rounded-full bg-sun" />
             </span>
             <div>
-              <p className="font-display text-sm text-sun">پورتتىكى زېمىن تالىشىش جېڭى</p>
+              <p className="font-display text-sm text-sun">رەڭلىك زېمىن تالىشىش جېڭى</p>
               <h1 className="font-display text-4xl leading-[1.35] text-foam md:text-5xl">
                 سىياھ دولقۇنى
                 <br />
@@ -364,7 +389,7 @@ function Menu({
             </div>
           </div>
           <p className="text-base leading-ug text-muted">
-            قىرغاقنى سىياھ بىلەن بوياڭ. دولقۇن چېكىنگەندە تېخىمۇ كۆپ زېمىنغا ئىگە بولغان تەرەپ غەلىبە قىلىدۇ.
+            مەيداننى سىياھ بىلەن بوياڭ. ۋاقىت توشقاندا تېخىمۇ كۆپ زېمىنغا ئىگە بولغان تەرەپ غەلىبە قىلىدۇ.
           </p>
           <div className="flex flex-col gap-5 pb-4">
             <InkButton
@@ -378,17 +403,24 @@ function Menu({
               {ready ? (
                 <>
                   باشلاش
-                  <span className="ink-chip ms-auto">4 گە 4 · {difficultyName(save.difficulty)}</span>
+                  <span className="ink-chip ms-auto">{levelById(save.level).name} · {difficultyName(save.difficulty)}</span>
                 </>
               ) : (
                 <span className="text-lg">دولقۇن ئويغىنىۋاتىدۇ…</span>
               )}
             </InkButton>
-            {buttons.map((b) => (
-              <InkButton key={b.screen} icon={b.icon} className="h-12 justify-start ps-1.5 pe-4 text-lg" onClick={() => onNavigate(b.screen)}>
-                {b.label}
-              </InkButton>
-            ))}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-5">
+              {buttons.map((b, i) => (
+                <InkButton
+                  key={b.screen}
+                  icon={b.icon}
+                  className={`h-12 justify-start ps-1.5 pe-3 text-base ${i === buttons.length - 1 && buttons.length % 2 ? "col-span-2" : ""}`}
+                  onClick={() => onNavigate(b.screen)}
+                >
+                  {b.label}
+                </InkButton>
+              ))}
+            </div>
           </div>
         </section>
         <section className="panel w-full p-5 md:ms-auto md:w-80">
@@ -442,8 +474,16 @@ function Menu({
               <dt className="text-muted">رەقىب</dt>
               <dd className="font-display text-xl">{difficultyName(save.difficulty)}</dd>
             </div>
+            <div>
+              <dt className="text-muted">پېرسوناژ</dt>
+              <dd className="font-display text-lg leading-7">{characterById(save.character).name}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">مەيدان</dt>
+              <dd className="font-display text-lg leading-7">{levelById(save.level).name}</dd>
+            </div>
           </dl>
-          <p className="mt-4 text-sm leading-ug text-muted">ئاپېلسىن گۇرۇپپا · 3 مىنۇتلۇق پورت مۇسابىقىسى</p>
+          <p className="mt-4 text-sm leading-ug text-muted">ئاپېلسىن گۇرۇپپا · 3 مىنۇتلۇق مۇسابىقە</p>
         </section>
       </div>
     </div>
@@ -456,14 +496,17 @@ function Loadout({
   onWeapon,
   onSub,
   onSpecial,
+  onCharacter,
 }: {
   save: SaveData;
   onBack: () => void;
   onWeapon: (id: WeaponId) => void;
   onSub: (id: SubId) => void;
   onSpecial: (id: SpecialId) => void;
+  onCharacter: (id: CharacterId) => void;
 }) {
   const info = weaponById(save.weapon);
+  const char = characterById(save.character);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-4 p-4 pb-12 md:p-6">
@@ -471,60 +514,156 @@ function Loadout({
           <BackButton onBack={onBack} />
           <h2 className="font-display text-3xl">قورال-جابدۇق</h2>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="panel p-4">
-            <p className="mb-3 text-sm text-muted">ئاساسىي قورال</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {WEAPONS.map((w) => (
-                <InkOption key={w.id} selected={save.weapon === w.id} className="p-3" onClick={() => onWeapon(w.id)}>
-                  <span className="block font-display text-lg">{w.name}</span>
-                  <span className="block text-sm text-sun">{w.kind}</span>
-                </InkOption>
-              ))}
-            </div>
-            <p className="mt-4 text-sm leading-ug text-muted">{info.blurb}</p>
-            <div className="mt-3 flex flex-col gap-2">
-              <Stat label="ئارىلىق" value={info.range} />
-              <Stat label="زەربە" value={info.damage} />
-              <Stat label="ئېتىش سۈرئىتى" value={info.fire} />
-              <Stat label="ھەرىكەتچانلىق" value={info.mobility} />
-              <Stat label="بوياش دائىرىسى" value={info.cover} />
-            </div>
-          </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem_minmax(0,1fr)]">
           <div className="flex flex-col gap-4">
             <div className="panel p-4">
-              <p className="mb-3 text-sm text-muted">قوشۇمچە قورال</p>
-              {SUBS.map((s) => (
-                <InkOption key={s.id} selected={save.sub === s.id} className="mb-3 flex w-full items-start gap-3 p-3" onClick={() => onSub(s.id)}>
-                  {s.id === "pop-bomb" ? <Bomb className="mt-2 size-5 shrink-0 text-orange" /> : <Radio className="mt-2 size-5 shrink-0 text-orange" />}
-                  <span>
-                    <span className="block font-display text-lg">{s.name}</span>
-                    <span className="text-sm leading-ug text-muted">{s.blurb}</span>
-                  </span>
-                </InkOption>
-              ))}
+              <p className="mb-3 text-sm text-muted">پېرسوناژ</p>
+              <div className="grid grid-cols-2 gap-3">
+                {CHARACTERS.map((c) => (
+                  <InkOption key={c.id} selected={save.character === c.id} className="p-3" onClick={() => onCharacter(c.id)}>
+                    <span className="block font-display text-base leading-7">{c.name}</span>
+                    <span className="block text-xs leading-6 text-sun">{c.trait}</span>
+                  </InkOption>
+                ))}
+              </div>
+              <p className="mt-3 text-sm leading-ug text-muted">{char.blurb}</p>
             </div>
+            <p className="text-sm leading-ug text-muted">پېرسوناژىڭىز ئوتتۇرىدا كۆرۈنۈۋاتىدۇ. گۇرۇپپا رەڭگىڭىز — ئاپېلسىن.</p>
+          </div>
+          {/* Keeps the middle of the screen clear so the 3D showcase model stays visible. */}
+          <div className="order-first h-[58vh] lg:order-none lg:h-auto" aria-hidden />
+          <div className="flex flex-col gap-4">
             <div className="panel p-4">
-              <p className="mb-3 text-sm text-muted">ئالاھىدە ماھارەت</p>
-              {SPECIALS.map((s) => (
-                <InkOption
-                  key={s.id}
-                  tone="violet"
-                  selected={save.special === s.id}
-                  className="mb-3 flex w-full items-start gap-3 p-3"
-                  onClick={() => onSpecial(s.id)}
-                >
-                  {s.id === "tempest" ? <CloudRain className="mt-2 size-5 shrink-0 text-violet" /> : <Zap className="mt-2 size-5 shrink-0 text-violet" />}
-                  <span>
-                    <span className="block font-display text-lg">{s.name}</span>
-                    <span className="text-sm leading-ug text-muted">{s.blurb}</span>
-                  </span>
-                </InkOption>
-              ))}
+              <p className="mb-3 text-sm text-muted">ئاساسىي قورال</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {WEAPONS.map((w) => (
+                  <InkOption key={w.id} selected={save.weapon === w.id} className="p-3" onClick={() => onWeapon(w.id)}>
+                    <span className="block font-display text-lg">{w.name}</span>
+                    <span className="block text-sm text-sun">{w.kind}</span>
+                  </InkOption>
+                ))}
+              </div>
+              <p className="mt-4 text-sm leading-ug text-muted">{info.blurb}</p>
+              <div className="mt-3 flex flex-col gap-2">
+                <Stat label="ئارىلىق" value={info.range} />
+                <Stat label="زەربە" value={info.damage} />
+                <Stat label="ئېتىش سۈرئىتى" value={info.fire} />
+                <Stat label="ھەرىكەتچانلىق" value={info.mobility} />
+                <Stat label="بوياش دائىرىسى" value={info.cover} />
+              </div>
             </div>
-            <p className="text-sm leading-ug text-muted">دولقۇنچىقىڭىز ئاپېلسىن مەيداندا كۆرۈنۈش بېرىۋاتىدۇ. گۇرۇپپا رەڭگىڭىز — ئاپېلسىن.</p>
+            <div className="flex flex-col gap-4">
+              <div className="panel p-4">
+                <p className="mb-3 text-sm text-muted">قوشۇمچە قورال</p>
+                {SUBS.map((s) => (
+                  <InkOption key={s.id} selected={save.sub === s.id} className="mb-3 flex w-full items-start gap-3 p-3" onClick={() => onSub(s.id)}>
+                    {s.id === "pop-bomb" ? <Bomb className="mt-2 size-5 shrink-0 text-orange" /> : <Radio className="mt-2 size-5 shrink-0 text-orange" />}
+                    <span>
+                      <span className="block font-display text-lg">{s.name}</span>
+                      <span className="text-sm leading-ug text-muted">{s.blurb}</span>
+                    </span>
+                  </InkOption>
+                ))}
+              </div>
+              <div className="panel p-4">
+                <p className="mb-3 text-sm text-muted">ئالاھىدە ماھارەت</p>
+                {SPECIALS.map((s) => (
+                  <InkOption
+                    key={s.id}
+                    tone="violet"
+                    selected={save.special === s.id}
+                    className="mb-3 flex w-full items-start gap-3 p-3"
+                    onClick={() => onSpecial(s.id)}
+                  >
+                    {s.id === "tempest" ? <CloudRain className="mt-2 size-5 shrink-0 text-violet" /> : <Zap className="mt-2 size-5 shrink-0 text-violet" />}
+                    <span>
+                      <span className="block font-display text-lg">{s.name}</span>
+                      <span className="text-sm leading-ug text-muted">{s.blurb}</span>
+                    </span>
+                  </InkOption>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+
+/** Top-down sketch of a level, drawn from the same data the engine builds from. */
+function MapPreview({ id, className = "" }: { id: LevelId; className?: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    const def = LEVEL_DEFS[id];
+    const W = c.width;
+    const H = c.height;
+    const px = (x: number) => ((x - MAP.minX) / MAP.w) * W;
+    const pz = (z: number) => (1 - (z - MAP.minZ) / MAP.d) * H;
+    const rect = (x0: number, x1: number, z0: number, z1: number) => [px(x0), pz(z1), px(x1) - px(x0), pz(z0) - pz(z1)] as const;
+    g.fillStyle = hex(def.ground);
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = hex(def.water);
+    for (const r of waterRects(def)) g.fillRect(...rect(r.minX, r.maxX, r.minZ, r.maxZ));
+    const blocks: { r: readonly [number, number, number, number]; top: number; c: number }[] = [];
+    for (const p of def.prims) {
+      if (p.t === "box" && !p.deco) blocks.push({ r: rect(p.x - p.w / 2, p.x + p.w / 2, p.z - p.d / 2, p.z + p.d / 2), top: p.y + p.h / 2, c: p.c });
+      else if (p.t === "stairs") {
+        const end = p.z + p.dir * p.run;
+        blocks.push({ r: rect(p.x - p.w / 2, p.x + p.w / 2, Math.min(p.z, end), Math.max(p.z, end)), top: p.h / 2, c: p.c });
+      }
+    }
+    blocks.sort((a, b) => a.top - b.top);
+    g.strokeStyle = "rgba(16, 32, 51, 0.35)";
+    g.lineWidth = 1;
+    for (const b of blocks) {
+      g.fillStyle = hex(b.c);
+      g.fillRect(...b.r);
+      g.strokeRect(...b.r);
+    }
+    for (const p of def.prims) {
+      if (p.t !== "palm" && p.t !== "poplar" && p.t !== "dome") continue;
+      g.fillStyle = p.t === "dome" ? hex(p.c) : "#3f9a4a";
+      g.beginPath();
+      g.arc(px(p.x), pz(p.z), p.t === "dome" ? (p.r / MAP.w) * W : 2.4, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = "#ff6a1a";
+    g.fillRect(...rect(-6, -2, -35, -31.5));
+    g.fillStyle = "#5b4dff";
+    g.fillRect(...rect(2, 6, 31.5, 35));
+    g.strokeStyle = hex(def.wall);
+    g.lineWidth = 4;
+    g.strokeRect(0, 0, W, H);
+  }, [id]);
+  return <canvas ref={ref} width={120} height={152} className={className} aria-hidden />;
+}
+
+function StageScreen({ save, onBack, onLevel }: { save: SaveData; onBack: () => void; onLevel: (id: LevelId) => void }) {
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 pb-12">
+        <div className="flex items-center justify-between gap-3 pb-2">
+          <BackButton onBack={onBack} />
+          <h2 className="font-display text-3xl">مەيدان تاللاش</h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {LEVELS.map((l) => (
+            <InkOption key={l.id} selected={save.level === l.id} className="flex items-center gap-4 p-3" onClick={() => onLevel(l.id)}>
+              <MapPreview id={l.id} className="h-36 w-auto shrink-0 rounded-xl" />
+              <span className="flex flex-col">
+                <span className="font-display text-xl leading-9">{l.name}</span>
+                <span className="text-sm leading-ug text-muted">{l.blurb}</span>
+              </span>
+            </InkOption>
+          ))}
+        </div>
+        <p className="text-sm leading-ug text-muted">تاللىغان مەيدانىڭىز ئارقا كۆرۈنۈشتە كۆرۈنىدۇ. ئاپېلسىن بازا ئاستىدا، بىنەپشە بازا ئۈستىدە.</p>
       </div>
     </div>
   );
@@ -592,7 +731,7 @@ function HowTo({ onBack }: { onBack: () => void }) {
     { title: "قوشۇمچە / ئالاھىدە", keys: ["ئوڭ چېكىش", "C", "F"], text: "قوشۇمچە قورال ئۈچۈن ئوڭ چېكىش ياكى C. ئالاھىدە ماھارەت ئۆلچىگۈچى تولغاندا F نى بېسىڭ." },
     { title: "نەتىجە تاختىسى", keys: ["Tab"], text: "مۇسابىقە جەريانىدا Tab نى بېسىپ تۇرسىڭىز، ھەممە ئويۇنچىنىڭ بوياش نومۇرى ۋە چاچرىتىشلىرى كۆرۈنىدۇ." },
     { title: "چاچرىتىلىش", keys: [], text: "ساغلاملىق بالدىقى يوق. پۈتۈنلەي سىياھقا بويالسىڭىز، بازىدا قايتا پەيدا بولىسىز." },
-    { title: "غەلىبە", keys: [], text: "ئۈچ مىنۇت توشقاندا پورتنىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
+    { title: "غەلىبە", keys: [], text: "ئۈچ مىنۇت توشقاندا مەيداننىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
   ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
@@ -631,7 +770,7 @@ function Credits({ onBack }: { onBack: () => void }) {
           <p className="font-display text-2xl text-orange">سىياھ دولقۇنى: زېمىن جېڭى</p>
           <p className="mt-3">4 گە 4 زېمىن تالىشىش ئېتىش ئويۇنى — ئەسلىي ئىجادىيەت. Claude Opus 5.5 بىلەن ياسالدى.</p>
           <p className="mt-3 text-sm leading-ug text-muted">
-            دولقۇنچاقلار، پورت ۋە بارلىق قوراللار ئەسلىي ئىجادىيەت. Nintendo نىڭ ھېچقانداق پېرسوناژى، ئىسمى ياكى ماتېرىيالى ئىشلىتىلمىدى. شەكىل، سىياھ ۋە
+            پېرسوناژلار، مەيدانلار ۋە بارلىق قوراللار ئەسلىي ئىجادىيەت. Nintendo نىڭ ھېچقانداق پېرسوناژى، ئىسمى ياكى ماتېرىيالى ئىشلىتىلمىدى. شەكىل، سىياھ ۋە
             ئاۋازلارنىڭ ھەممىسى توركۆرگۈچتە ھاسىل قىلىنىدۇ.
           </p>
           <p className="mt-4 font-display text-sm text-sun">{VERSION}</p>
@@ -770,7 +909,7 @@ function Hud({
         </div>
       </div>
 
-      <div className="pointer-events-auto absolute top-20 right-3 flex flex-col items-end gap-4">
+      <div className="pointer-events-auto absolute top-20 right-3 flex items-start gap-2">
         <InkButton className="h-11 ps-1.5 pe-3 text-base" icon={<Pause className="size-4" />} onClick={onPause}>
           توختىتىش
         </InkButton>
@@ -879,7 +1018,7 @@ function Hud({
 
       {showBoard ? (
         <div
-          className={`absolute inset-x-3 top-24 mx-auto max-w-3xl ${touch ? "pointer-events-auto" : ""}`}
+          className={`absolute inset-x-3 mx-auto max-w-3xl ${touch ? "pointer-events-auto top-32" : "top-24"}`}
           onClick={touch ? () => setBoardOpen(false) : undefined}
         >
           <div className="panel max-h-[70vh] overflow-y-auto p-4">
@@ -986,9 +1125,9 @@ function TouchControls({ input }: { input: InputState }) {
     k.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   }
   return (
-    <div className="absolute inset-0 z-30">
+    <div className="pointer-events-none absolute inset-0 z-30">
       <div
-        className="absolute top-28 right-0 bottom-28 left-1/3"
+        className="pointer-events-auto absolute top-32 right-0 bottom-28 left-1/3"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           const startX = e.clientX;
@@ -1011,7 +1150,7 @@ function TouchControls({ input }: { input: InputState }) {
       />
       <div
         ref={stick}
-        className="absolute bottom-6 left-4 h-32 w-32 rounded-full border-2 border-foam/80 bg-navy/50"
+        className="pointer-events-auto absolute bottom-6 left-4 h-32 w-32 rounded-full border-2 border-foam/80 bg-navy/50"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           e.stopPropagation();
@@ -1025,7 +1164,7 @@ function TouchControls({ input }: { input: InputState }) {
       >
         <div ref={knob} className="absolute top-1/2 left-1/2 h-14 w-14 rounded-full bg-foam" style={{ transform: "translate(-50%, -50%)" }} />
       </div>
-      <div className="absolute right-4 bottom-6 grid grid-cols-2 gap-x-2 gap-y-3">
+      <div className="pointer-events-auto absolute right-4 bottom-6 grid grid-cols-2 gap-x-2 gap-y-3">
         <HoldButton label="ئۈزۈش" icon={<Waves className="size-4" />} onHold={(v) => (input.swim = v)} />
         <HoldButton label="سەكرەش" icon={<Zap className="size-4" />} onHold={(v) => (input.jump = v)} />
         <HoldButton label="قوشۇمچە" icon={<Bomb className="size-4" />} onHold={(v) => (input.bomb = v)} />
