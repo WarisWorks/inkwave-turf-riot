@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { LEVEL_DEFS, MAP, waterRects, type LevelDef, type Rect } from "./levels";
-import { characterById } from "./types";
+import { SPECIALS, characterById } from "./types";
 import type { BoardRow, BotRole, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
 
 const GW = 120;
@@ -47,6 +47,18 @@ type Kid = {
   nameSprite: THREE.Sprite;
   nameCanvas: HTMLCanvasElement;
   char: CharacterId;
+  torso: THREE.Object3D;
+  /** Neck pivot: tilts the head, eyes and headwear together. */
+  headPivot: THREE.Group;
+  eyes: THREE.Group[];
+  armGun: THREE.Group;
+  armSup: THREE.Group;
+  /** Sleek swim form, shown instead of the body while swimming. */
+  squid: THREE.Group;
+  fins: THREE.Object3D[];
+  /** 0 = humanoid, 1 = squid; eased so the swap reads as a morph. */
+  swim: number;
+  blink: number;
 };
 
 type Actor = {
@@ -91,6 +103,19 @@ type Actor = {
   painted: number;
   rush: number;
   stuck: number;
+  /** Smoothed movement velocity, for acceleration and deceleration. */
+  mvx: number;
+  mvz: number;
+  /** Swimming up a wall covered in own ink. */
+  climbing: boolean;
+  /** Seconds left in a special's charge-up (0 = not charging), and the aim captured at activation. */
+  spT: number;
+  spX: number;
+  spY: number;
+  spZ: number;
+  /** Distance walked since the last footprint, and which foot is next. */
+  stepAcc: number;
+  stepSide: number;
   char: CharacterId;
   mods: CharacterMods;
   role: BotRole;
@@ -205,6 +230,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let shake = 0;
   let hitMark = 0;
   let killMark = 0;
+  /** Seconds since the final whistle, for the victory / defeat animation and camera. */
+  let endT = 0;
+  /** End shot: the open direction the camera settles in, and where it started from. */
+  let endAng = 0;
+  let endFromAng = 0;
+  let endFromDist = 4.6;
+  let endFromY = 1.8;
   let orbitAng = 0.4;
   let hudAcc = 0;
   let miniAcc = 0;
@@ -686,14 +718,24 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const dark = new THREE.MeshLambertMaterial({ color: 0x1c2430 });
   const white = new THREE.MeshLambertMaterial({ color: 0xfff8f2 });
   const pupil = new THREE.MeshLambertMaterial({ color: 0x1a1020 });
-  const geoTorso = new THREE.CapsuleGeometry(0.26, 0.28, 4, 8);
-  const geoHead = new THREE.SphereGeometry(0.3, 14, 12);
-  const geoEye = new THREE.SphereGeometry(0.075, 8, 8);
-  const geoPupil = new THREE.SphereGeometry(0.038, 8, 8);
+  // Athletic proportions: a slimmer torso, longer legs, arms, and big expressive eyes.
+  const geoTorso = new THREE.CapsuleGeometry(0.22, 0.34, 4, 10);
+  const geoHead = new THREE.SphereGeometry(0.3, 16, 12);
+  const geoEye = new THREE.SphereGeometry(0.095, 10, 8);
+  const geoPupil = new THREE.SphereGeometry(0.052, 8, 6);
+  const geoGlint = new THREE.SphereGeometry(0.02, 6, 6);
   const geoTent = new THREE.ConeGeometry(0.09, 0.62, 6);
-  const geoLeg = new THREE.CapsuleGeometry(0.085, 0.26, 3, 6);
+  const geoSideTent = new THREE.ConeGeometry(0.068, 0.46, 6).rotateX(Math.PI);
+  const geoLeg = new THREE.CapsuleGeometry(0.075, 0.32, 3, 6);
   const geoShoe = new THREE.SphereGeometry(0.11, 8, 6);
-  const geoShort = new THREE.SphereGeometry(0.24, 10, 8);
+  const geoShort = new THREE.SphereGeometry(0.23, 10, 8);
+  const geoArm = new THREE.CapsuleGeometry(0.056, 0.26, 3, 6);
+  const geoHand = new THREE.SphereGeometry(0.068, 8, 6);
+  const geoSleeve = new THREE.SphereGeometry(0.088, 8, 6);
+  const geoSquidBody = new THREE.SphereGeometry(0.34, 14, 10);
+  const geoSquidMantle = new THREE.ConeGeometry(0.3, 0.5, 5);
+  const geoSquidFin = new THREE.ConeGeometry(0.06, 0.44, 5);
+  const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
   // Glossy team-coloured ink tanks make the guns read as loaded and dangerous.
   const inkGloss = {
@@ -857,30 +899,36 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const hair = () => {
     const m = new THREE.Mesh(geoHair, hairMat);
     m.position.y = HEAD_Y;
-    m.rotation.x = -0.6;
+    m.rotation.x = -0.78;
     return m;
   };
 
   function headwear(char: CharacterId, team: Team): { parts: THREE.Object3D[]; tentL: THREE.Object3D; tentR: THREE.Object3D } {
     if (char === "wave") {
-      const tentL = new THREE.Mesh(geoTent, cloth[team]);
-      const tentR = new THREE.Mesh(geoTent, cloth[team]);
+      const tentL = new THREE.Mesh(geoTent, inkGloss[team]);
+      const tentR = new THREE.Mesh(geoTent, inkGloss[team]);
       tentL.position.set(-0.16, 1.86, -0.02);
       tentR.position.set(0.16, 1.86, -0.02);
       tentL.rotation.z = 0.35;
       tentR.rotation.z = -0.35;
-      const mid = new THREE.Mesh(geoTent, cloth[team]);
+      const mid = new THREE.Mesh(geoTent, inkGloss[team]);
       mid.position.set(0, 1.92, -0.08);
       mid.scale.set(1.1, 1.15, 1);
       return { parts: [tentL, tentR, mid], tentL, tentR };
     }
     if (char === "braids") {
       const cap = new THREE.Mesh(geoDoppaSmall, doppaGirl);
-      cap.position.y = HEAD_Y + 0.29;
+      cap.position.y = HEAD_Y + 0.31;
+      // Braids tied off with a bead of team ink.
       const braid = (x: number) => {
+        const g = new THREE.Group();
         const b = new THREE.Mesh(geoBraid, hairMat);
         b.position.set(x, -0.31, 0);
-        return b;
+        const tie = new THREE.Mesh(geoKnot, inkGloss[team]);
+        tie.position.set(x, -0.63, 0);
+        tie.scale.setScalar(0.7);
+        g.add(b, tie);
+        return g;
       };
       const tentL = swayPivot(-0.09, 1.6, -0.24, 1, [braid(-0.1), braid(-0.03), braid(0.04)]);
       const tentR = swayPivot(0.09, 1.6, -0.24, -1, [braid(-0.04), braid(0.03), braid(0.1)]);
@@ -889,15 +937,16 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (char === "telpek") {
       const hat = new THREE.Mesh(geoTelpek, furMat);
-      hat.position.y = HEAD_Y + 0.28;
+      hat.position.y = HEAD_Y + 0.33;
       const rim = new THREE.Mesh(geoTelpekRim, furRim);
-      rim.position.y = HEAD_Y + 0.14;
-      return { parts: [hair(), hat, rim], tentL: new THREE.Object3D(), tentR: new THREE.Object3D() };
+      rim.position.y = HEAD_Y + 0.2;
+      const { tentL, tentR } = sideTentacles(team);
+      return { parts: [hair(), hat, rim, tentL, tentR], tentL, tentR };
     }
     if (char === "scarf") {
       const scarf = new THREE.Mesh(geoScarf, scarfMat);
       scarf.position.y = HEAD_Y;
-      scarf.rotation.x = -0.62;
+      scarf.rotation.x = -0.82;
       const knot = new THREE.Mesh(geoKnot, scarfMat);
       knot.position.set(0, 1.3, -0.27);
       const tail = () => {
@@ -907,12 +956,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       };
       const tentL = swayPivot(-0.05, 1.3, -0.29, 1, [tail()]);
       const tentR = swayPivot(0.05, 1.3, -0.29, -1, [tail()]);
-      return { parts: [scarf, knot, tentL, tentR], tentL, tentR };
+      const side = sideTentacles(team);
+      return { parts: [scarf, knot, tentL, tentR, side.tentL, side.tentR], tentL, tentR };
     }
     // doppa and dutar both wear the men's black-and-white doppa.
     const cap = new THREE.Mesh(geoDoppa, doppaMen);
-    cap.position.y = HEAD_Y + 0.26;
-    const parts: THREE.Object3D[] = [hair(), cap];
+    cap.position.y = HEAD_Y + 0.29;
+    const { tentL, tentR } = sideTentacles(team);
+    const parts: THREE.Object3D[] = [hair(), cap, tentL, tentR];
     if (char === "dutar") {
       // A long-necked two-string dutar slung across the back.
       const dutar = new THREE.Group();
@@ -928,7 +979,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       dutar.rotation.set(0.12, 0, 0.5);
       parts.push(dutar);
     }
-    return { parts, tentL: new THREE.Object3D(), tentR: new THREE.Object3D() };
+    return { parts, tentL, tentR };
+  }
+
+  /** Two glossy ink tentacles hanging by the ears: every character is part squid. */
+  function sideTentacles(team: Team) {
+    const tent = () => {
+      const t = new THREE.Mesh(geoSideTent, inkGloss[team]);
+      t.position.y = -0.2;
+      return t;
+    };
+    const tentL = swayPivot(-0.25, 1.47, -0.06, 1, [tent()]);
+    const tentR = swayPivot(0.25, 1.47, -0.06, -1, [tent()]);
+    return { tentL, tentR };
   }
 
   function makeKid(team: Team, name: string, char: CharacterId = "wave"): Kid {
@@ -937,41 +1000,68 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     root.add(body);
     const skinMat = skinFor(char);
     const torso = new THREE.Mesh(geoTorso, cloth[team]);
-    torso.position.y = 0.92;
+    torso.position.y = 0.98;
     const head = new THREE.Mesh(geoHead, skinMat);
     head.position.set(0, HEAD_Y, 0);
-    const eyeL = new THREE.Mesh(geoEye, white);
-    const eyeR = new THREE.Mesh(geoEye, white);
-    eyeL.position.set(-0.1, 1.52, 0.22);
-    eyeR.position.set(0.1, 1.52, 0.22);
-    const pL = new THREE.Mesh(geoPupil, pupil);
-    const pR = new THREE.Mesh(geoPupil, pupil);
-    pL.position.set(-0.1, 1.51, 0.28);
-    pR.position.set(0.1, 1.51, 0.28);
+    const makeEye = (side: 1 | -1) => {
+      const g = new THREE.Group();
+      g.position.set(0.105 * side, 1.5, 0.2);
+      g.rotation.y = 0.2 * side;
+      const white_ = new THREE.Mesh(geoEye, white);
+      const pupil_ = new THREE.Mesh(geoPupil, pupil);
+      pupil_.position.set(0, -0.006, 0.062);
+      const glint = new THREE.Mesh(geoGlint, glintMat);
+      glint.position.set(0.022, 0.03, 0.106);
+      g.add(white_, pupil_, glint);
+      return g;
+    };
+    const eyes = [makeEye(-1), makeEye(1)];
     const { parts, tentL, tentR } = headwear(char, team);
+    const headPivot = new THREE.Group();
+    headPivot.position.y = 1.25;
+    const headInner = new THREE.Group();
+    headInner.position.y = -1.25;
+    headInner.add(head, ...eyes, ...parts);
+    headPivot.add(headInner);
     const shortM = new THREE.Mesh(geoShort, shorts[team]);
-    shortM.position.y = 0.62;
-    shortM.scale.set(1.05, 0.55, 1.05);
+    shortM.position.y = 0.68;
+    shortM.scale.set(1.02, 0.5, 1);
     const legs = new THREE.Group();
     const pivL = new THREE.Group();
     const pivR = new THREE.Group();
-    pivL.position.set(-0.12, 0.52, 0);
-    pivR.position.set(0.12, 0.52, 0);
+    pivL.position.set(-0.11, 0.62, 0);
+    pivR.position.set(0.11, 0.62, 0);
     const legL = new THREE.Mesh(geoLeg, skinMat);
     const legR = new THREE.Mesh(geoLeg, skinMat);
-    legL.position.set(0, -0.18, 0);
-    legR.position.set(0, -0.18, 0);
+    legL.position.set(0, -0.22, 0);
+    legR.position.set(0, -0.22, 0);
     const shoeL = new THREE.Mesh(geoShoe, dark);
     const shoeR = new THREE.Mesh(geoShoe, dark);
-    shoeL.position.set(0, -0.38, 0.05);
-    shoeR.position.set(0, -0.38, 0.05);
-    shoeL.scale.set(1.15, 0.55, 1.45);
-    shoeR.scale.set(1.15, 0.55, 1.45);
+    shoeL.position.set(0, -0.48, 0.05);
+    shoeR.position.set(0, -0.48, 0.05);
+    shoeL.scale.set(1.1, 0.55, 1.5);
+    shoeR.scale.set(1.1, 0.55, 1.5);
     pivL.add(legL, shoeL);
     pivR.add(legR, shoeR);
     legs.add(pivL, pivR);
+    // Arms: the gun arm points forward, the support arm reaches across to steady it.
+    const makeArm = (x: number) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, 1.2, 0.02);
+      const sleeve = new THREE.Mesh(geoSleeve, cloth[team]);
+      const arm = new THREE.Mesh(geoArm, skinMat);
+      arm.position.y = -0.19;
+      const hand = new THREE.Mesh(geoHand, skinMat);
+      hand.position.y = -0.38;
+      pivot.add(sleeve, arm, hand);
+      return pivot;
+    };
+    const armGun = makeArm(0.27);
+    armGun.rotation.set(-1.35, 0, 0.05);
+    const armSup = makeArm(-0.27);
+    armSup.rotation.set(-1.15, 0, 0.95);
     const mount = new THREE.Group();
-    mount.position.set(0.22, 0.98, 0.18);
+    mount.position.set(0.24, 1.08, 0.3);
     const weapons = {
       spritzer: makeWeapon("spritzer", team),
       roller: makeWeapon("roller", team),
@@ -982,7 +1072,40 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       weapons[k].visible = k === "spritzer";
       mount.add(weapons[k]);
     });
-    body.add(torso, head, eyeL, eyeR, pL, pR, ...parts, shortM, legs, mount);
+    body.add(torso, headPivot, shortM, legs, armGun, armSup, mount);
+
+    // Squid form: a glossy teardrop with a pointed mantle, two eyes and trailing fins.
+    const squid = new THREE.Group();
+    const sBody = new THREE.Mesh(geoSquidBody, inkGloss[team]);
+    sBody.scale.set(0.85, 0.42, 1.2);
+    sBody.position.set(0, 0.16, -0.05);
+    const mantle = new THREE.Mesh(geoSquidMantle, inkGloss[team]);
+    mantle.rotation.x = Math.PI / 2;
+    mantle.scale.set(1, 1, 0.45);
+    mantle.position.set(0, 0.18, 0.38);
+    const sEye = (side: 1 | -1) => {
+      const e = new THREE.Group();
+      e.position.set(0.13 * side, 0.29, 0.16);
+      e.scale.setScalar(0.72);
+      const w = new THREE.Mesh(geoEye, white);
+      const pu = new THREE.Mesh(geoPupil, pupil);
+      pu.position.set(0, 0, 0.062);
+      e.add(w, pu);
+      return e;
+    };
+    const fins = [-0.16, -0.055, 0.055, 0.16].map((x) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, 0.14, -0.45);
+      const fin = new THREE.Mesh(geoSquidFin, inkGloss[team]);
+      fin.rotation.x = -Math.PI / 2;
+      fin.position.z = -0.2;
+      pivot.add(fin);
+      return pivot;
+    });
+    squid.add(sBody, mantle, sEye(-1), sEye(1), ...fins);
+    squid.visible = false;
+    root.add(squid);
+
     const nameCanvas = document.createElement("canvas");
     nameCanvas.width = 256;
     nameCanvas.height = 64;
@@ -990,9 +1113,29 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     ntex.colorSpace = THREE.SRGBColorSpace;
     const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: ntex, transparent: true, depthTest: true }));
     nameSprite.scale.set(1.8, 0.45, 1);
-    nameSprite.position.y = char === "telpek" ? 2.45 : 2.25;
+    nameSprite.position.y = char === "telpek" ? 2.5 : 2.3;
     root.add(nameSprite);
-    const kid: Kid = { root, body, legs, tentL, tentR, mount, weapons, nameSprite, nameCanvas, char };
+    const kid: Kid = {
+      root,
+      body,
+      legs,
+      tentL,
+      tentR,
+      mount,
+      weapons,
+      nameSprite,
+      nameCanvas,
+      char,
+      torso,
+      headPivot,
+      eyes,
+      armGun,
+      armSup,
+      squid,
+      fins,
+      swim: 0,
+      blink: 1 + rand() * 3,
+    };
     writeName(kid, name, team);
     scene.add(root);
     root.visible = false;
@@ -1074,6 +1217,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       painted: 0,
       rush: 0,
       stuck: 0,
+      mvx: 0,
+      mvz: 0,
+      climbing: false,
+      spT: 0,
+      spX: 0,
+      spY: 0,
+      spZ: 1,
+      stepAcc: 0,
+      stepSide: 1,
       char,
       mods: characterById(char).mods,
       role: isPlayer ? "attacker" : "painter",
@@ -1133,7 +1285,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     });
   }
 
-  const MAXD = 240;
+  const MAXD = 420;
   const decalGeo = new THREE.PlaneGeometry(1, 1);
   const decalMap = new THREE.CanvasTexture(softWhite);
   decalMap.colorSpace = THREE.SRGBColorSpace;
@@ -1157,19 +1309,128 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const colO = new THREE.Color(0xff6a1a);
   const colV = new THREE.Color(0x5b4dff);
 
+  // Splats pop in with a little overshoot; young ones are re-scaled each frame in syncVisuals.
+  const decalPos = new Float32Array(MAXD * 3);
+  const decalQuat = new Float32Array(MAXD * 4);
+  const decalR = new Float32Array(MAXD);
+  const decalAge = new Float32Array(MAXD).fill(9);
+  const POP = 0.22;
+  function placeDecal(i: number, scale: number) {
+    dummy.position.set(decalPos[i * 3], decalPos[i * 3 + 1], decalPos[i * 3 + 2]);
+    dummy.quaternion.set(decalQuat[i * 4], decalQuat[i * 4 + 1], decalQuat[i * 4 + 2], decalQuat[i * 4 + 3]);
+    dummy.scale.setScalar(Math.max(0.001, scale));
+    dummy.updateMatrix();
+    decals.setMatrixAt(i, dummy.matrix);
+  }
   function addDecal(x: number, y: number, z: number, nx: number, ny: number, nz: number, radius: number, team: Team) {
     const i = decalCursor % MAXD;
     decalCursor++;
-    dummy.position.set(x + nx * 0.04, y + ny * 0.04, z + nz * 0.04);
+    decalPos[i * 3] = x + nx * 0.04;
+    decalPos[i * 3 + 1] = y + ny * 0.04;
+    decalPos[i * 3 + 2] = z + nz * 0.04;
     tmpN.set(nx, ny, nz).normalize();
     dummy.quaternion.setFromUnitVectors(zV, tmpN);
-    dummy.scale.setScalar(radius * 2);
-    dummy.updateMatrix();
-    decals.setMatrixAt(i, dummy.matrix);
+    // A random spin keeps repeated splats from lining up.
+    dummy.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(zV, rand() * Math.PI * 2));
+    decalQuat[i * 4] = dummy.quaternion.x;
+    decalQuat[i * 4 + 1] = dummy.quaternion.y;
+    decalQuat[i * 4 + 2] = dummy.quaternion.z;
+    decalQuat[i * 4 + 3] = dummy.quaternion.w;
+    decalR[i] = radius * 2;
+    decalAge[i] = 0;
+    placeDecal(i, 0.001);
     decals.setColorAt(i, team === 1 ? colO : colV);
     decals.count = Math.min(MAXD, decalCursor);
     decals.instanceMatrix.needsUpdate = true;
     if (decals.instanceColor) decals.instanceColor.needsUpdate = true;
+  }
+  function popDecals(dt: number) {
+    let dirty = false;
+    const n = Math.min(MAXD, decalCursor);
+    for (let i = 0; i < n; i++) {
+      if (decalAge[i] >= POP) continue;
+      decalAge[i] = Math.min(POP, decalAge[i] + dt);
+      const t = decalAge[i] / POP;
+      // easeOutBack: overshoot then settle, for a soft "splat".
+      const e = 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
+      placeDecal(i, decalR[i] * e);
+      dirty = true;
+    }
+    if (dirty) decals.instanceMatrix.needsUpdate = true;
+  }
+
+  // Wall ink: every splat on a vertical face is remembered so own-colour walls can be swum up.
+  const MAXW = 700;
+  const wallX = new Float32Array(MAXW);
+  const wallY = new Float32Array(MAXW);
+  const wallZ = new Float32Array(MAXW);
+  const wallR = new Float32Array(MAXW);
+  const wallTeam = new Uint8Array(MAXW);
+  let wallCursor = 0;
+  function inkWall(x: number, y: number, z: number, nx: number, ny: number, nz: number, radius: number, team: Team) {
+    addDecal(x, y, z, nx, ny, nz, radius, team);
+    const i = wallCursor % MAXW;
+    wallCursor++;
+    wallX[i] = x;
+    wallY[i] = y;
+    wallZ[i] = z;
+    wallR[i] = radius;
+    wallTeam[i] = team;
+  }
+  // Temporary ink footprints: small ovals that shrink away after a couple of seconds.
+  const MAXF = 180;
+  const FOOT_LIFE = 2.4;
+  const footMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  const feet = new THREE.InstancedMesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2), footMat, MAXF);
+  feet.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXF * 3), 3);
+  feet.frustumCulled = false;
+  feet.count = 0;
+  scene.add(feet);
+  const footX = new Float32Array(MAXF);
+  const footY = new Float32Array(MAXF);
+  const footZ = new Float32Array(MAXF);
+  const footYaw = new Float32Array(MAXF);
+  const footAge = new Float32Array(MAXF).fill(99);
+  let footCursor = 0;
+  function addFoot(x: number, y: number, z: number, yaw: number, team: Team) {
+    const i = footCursor % MAXF;
+    footCursor++;
+    footX[i] = x;
+    footY[i] = y;
+    footZ[i] = z;
+    footYaw[i] = yaw;
+    footAge[i] = 0;
+    feet.count = Math.min(MAXF, footCursor);
+    feet.setColorAt(i, team === 1 ? colO : colV);
+    if (feet.instanceColor) feet.instanceColor.needsUpdate = true;
+  }
+  function updateFeet(dt: number) {
+    for (let i = 0; i < MAXF; i++) {
+      if (footAge[i] > FOOT_LIFE) continue;
+      footAge[i] += dt;
+      const fade = Math.min(1, (FOOT_LIFE - footAge[i]) / 0.8);
+      const k = Math.max(0.001, fade);
+      dummy.position.set(footX[i], footY[i], footZ[i]);
+      dummy.rotation.set(0, footYaw[i], 0);
+      dummy.scale.set(0.15 * k, 1, 0.24 * k);
+      dummy.updateMatrix();
+      feet.setMatrixAt(i, dummy.matrix);
+    }
+    feet.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Team of the newest wall splat covering (x, y, z) within `pad`, or 0. */
+  function wallTeamAt(x: number, y: number, z: number, pad: number) {
+    const n = Math.min(MAXW, wallCursor);
+    for (let k = 1; k <= n; k++) {
+      const i = (wallCursor - k) % MAXW;
+      const r = wallR[i] + pad;
+      const dx = x - wallX[i];
+      const dy = y - wallY[i];
+      const dz = z - wallZ[i];
+      if (dx * dx + dy * dy + dz * dz <= r * r) return wallTeam[i];
+    }
+    return 0;
   }
 
   const PMAX = 640;
@@ -1177,20 +1438,25 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const pCol = new Float32Array(PMAX * 3);
   const pVel = new Float32Array(PMAX * 3);
   const pLife = new Float32Array(PMAX);
+  /** Ground height under each particle at spawn, so it can bounce there. */
+  const pFloor = new Float32Array(PMAX);
   pPos.fill(0);
   for (let i = 0; i < PMAX; i++) pPos[i * 3 + 1] = -40;
   const pGeo = new THREE.BufferGeometry();
   pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
   pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+  const dotTex = new THREE.CanvasTexture(softWhite);
+  dotTex.colorSpace = THREE.SRGBColorSpace;
   const points = new THREE.Points(
     pGeo,
-    new THREE.PointsMaterial({ size: 0.22, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true }),
+    new THREE.PointsMaterial({ size: 0.3, map: dotTex, alphaTest: 0.25, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true }),
   );
   points.frustumCulled = false;
   scene.add(points);
   let pCursor = 0;
   function burst(x: number, y: number, z: number, team: Team, n: number, speed = 4) {
     const c = team === 1 ? colO : colV;
+    const floorY = surfaceTop(x, z) + 0.06;
     for (let i = 0; i < n; i++) {
       const id = pCursor % PMAX;
       pCursor++;
@@ -1201,12 +1467,79 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       pVel[id * 3 + 1] = rand() * speed;
       pVel[id * 3 + 2] = (rand() - 0.5) * speed;
       pLife[id] = 0.35 + rand() * 0.45;
+      pFloor[id] = floorY;
       pCol[id * 3] = c.r;
       pCol[id * 3 + 1] = c.g;
       pCol[id * 3 + 2] = c.b;
     }
     pGeo.attributes.position.needsUpdate = true;
     pGeo.attributes.color.needsUpdate = true;
+  }
+  /** One particle with an explicit velocity (trails, converging charge sparks). */
+  function spark(x: number, y: number, z: number, vx: number, vy: number, vz: number, team: Team, life: number) {
+    const c = team === 1 ? colO : colV;
+    const id = pCursor % PMAX;
+    pCursor++;
+    pPos[id * 3] = x;
+    pPos[id * 3 + 1] = y;
+    pPos[id * 3 + 2] = z;
+    pVel[id * 3] = vx;
+    pVel[id * 3 + 1] = vy;
+    pVel[id * 3 + 2] = vz;
+    pLife[id] = life;
+    pFloor[id] = surfaceTop(x, z) + 0.06;
+    pCol[id * 3] = c.r;
+    pCol[id * 3 + 1] = c.g;
+    pCol[id * 3 + 2] = c.b;
+    pGeo.attributes.color.needsUpdate = true;
+  }
+
+  // Special effects: a glow orb while a special charges, and a shockwave ring when it bursts.
+  type Fx = { alive: boolean; ring: boolean; t: number; dur: number; size: number; owner: number; mesh: THREE.Mesh };
+  const fxOrbGeo = new THREE.SphereGeometry(1, 20, 14);
+  const fxRingGeo = new THREE.RingGeometry(0.8, 1, 56).rotateX(-Math.PI / 2);
+  const fxPool: Fx[] = [];
+  for (let i = 0; i < 8; i++) {
+    const ring = i >= 4;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, opacity: 0, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(ring ? fxRingGeo : fxOrbGeo, mat);
+    mesh.visible = false;
+    scene.add(mesh);
+    fxPool.push({ alive: false, ring, t: 0, dur: 1, size: 1, owner: -1, mesh });
+  }
+  function spawnFx(ring: boolean, x: number, y: number, z: number, team: Team, dur: number, size: number, owner: number) {
+    const fx = fxPool.find((f) => f.ring === ring && !f.alive) ?? fxPool.find((f) => f.ring === ring)!;
+    fx.alive = true;
+    fx.t = 0;
+    fx.dur = dur;
+    fx.size = size;
+    fx.owner = owner;
+    fx.mesh.visible = true;
+    fx.mesh.position.set(x, y, z);
+    (fx.mesh.material as THREE.MeshBasicMaterial).color.copy(team === 1 ? colO : colV);
+  }
+  function updateFx(dt: number) {
+    for (const fx of fxPool) {
+      if (!fx.alive) continue;
+      fx.t += dt;
+      const k = Math.min(1, fx.t / fx.dur);
+      const mat = fx.mesh.material as THREE.MeshBasicMaterial;
+      if (fx.ring) {
+        fx.mesh.scale.setScalar(0.6 + (fx.size - 0.6) * (1 - Math.pow(1 - k, 3)));
+        mat.opacity = 0.9 * (1 - k);
+      } else {
+        const o = actors[fx.owner];
+        if (!o || !o.alive || o.spT <= 0) fx.t = fx.dur;
+        else fx.mesh.position.set(o.x, o.y + 1, o.z);
+        const pulse = 1 + Math.sin(fx.t * 38) * 0.08;
+        fx.mesh.scale.setScalar((0.4 + 1.3 * k) * pulse);
+        mat.opacity = 0.18 + 0.32 * k;
+      }
+      if (fx.t >= fx.dur) {
+        fx.alive = false;
+        fx.mesh.visible = false;
+      }
+    }
   }
 
   const zones: Zone[] = [];
@@ -1346,6 +1679,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     a.x = clamp(a.x, -29.4, 29.4);
     a.z = clamp(a.z, -37.4, 37.4);
+  }
+
+  /** Top of the wall in front of an actor at (x, z) with feet at y, or -1 if nothing blocks. */
+  function blockerTop(x: number, z: number, y: number) {
+    const r = 0.36;
+    let top = -1;
+    for (let i = 0; i < solids.length; i++) {
+      const b = solids[i];
+      if (y + 1.2 < b.minY || y > b.maxY - 0.3) continue;
+      if (b.maxY <= y + 0.55) continue;
+      if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) top = Math.max(top, b.maxY);
+    }
+    return top;
   }
 
   function blocked(x: number, z: number, y: number) {
@@ -1514,6 +1860,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (actor.ink < cost) return;
     actor.ink -= cost;
     actor.fireCd = 0.35;
+    actor.recoil = 1;
     const originY = actor.y + 1.25;
     const maxD = fromPlayer ? P.reach[0] + charge * P.reach[1] : 12 + charge * 30;
     const hit = castWorld(actor.x, originY, actor.z, dir.x, dir.y, dir.z, maxD);
@@ -1554,7 +1901,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (hit && !victim) {
       paint(hit.x, hit.z, (fromPlayer ? 1.3 : 0.8) + charge, actor.team, actor);
-      if (hit.ny < 0.65) addDecal(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + charge * 0.4, actor.team);
+      if (Math.abs(hit.ny) < 0.65) inkWall(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + charge * 0.4, actor.team);
     }
     if (victim) hurt(victim, fromPlayer ? P.dmg[0] + P.dmg[1] * charge : 16 + 86 * charge, actor, "splat");
     burst(actor.x + dir.x * 0.8, originY, actor.z + dir.z * 0.8, actor.team, fromPlayer ? 14 : 8, 3);
@@ -1591,6 +1938,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const f = yawForward(actor.yaw);
     const r = yawRight(actor.yaw);
     const P = POWER.roller;
+    actor.recoil = 1;
     const fan = fromPlayer ? P.flicks : 2;
     const speed = fromPlayer ? P.flickSpeed : 20;
     for (let i = -fan; i <= fan; i++) {
@@ -1653,19 +2001,74 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (fromPlayer) audio.shoot(160);
   }
 
+  const SPECIAL_CHARGE = 0.75;
+
+  /** Starts a special: a short, readable wind-up before the burst. */
   function useSpecial(actor: Actor, dir: THREE.Vector3) {
-    if (actor.special < 100 || !actor.alive) return;
+    if (actor.special < 100 || !actor.alive || actor.spT > 0) return;
     actor.special = 0;
-    if (actor.specialId === "reef-rush") {
-      actor.rush = 6;
-      if (actor.isPlayer) setBanner("مەرجان يۈگۈرۈشى");
-      else pushFeed(`${actor.name} — مەرجان يۈگۈرۈشى!`);
-      audio.chime();
+    actor.spT = SPECIAL_CHARGE;
+    actor.spX = dir.x;
+    actor.spY = dir.y;
+    actor.spZ = dir.z;
+    actor.invuln = Math.max(actor.invuln, SPECIAL_CHARGE + 0.2);
+    spawnFx(false, actor.x, actor.y + 1, actor.z, actor.team, SPECIAL_CHARGE, 1, actors.indexOf(actor));
+    if (actor.isPlayer || Math.hypot(actor.x - actors[0].x, actor.z - actors[0].z) < 22) audio.charge(SPECIAL_CHARGE);
+  }
+
+  function chargeTick(actor: Actor, dt: number) {
+    actor.spT -= dt;
+    // Ink droplets rush inward toward the charging character.
+    for (let k = 0; k < 2; k++) {
+      const ang = rand() * Math.PI * 2;
+      const r = 2 + rand() * 0.8;
+      const sx = actor.x + Math.cos(ang) * r;
+      const sz = actor.z + Math.sin(ang) * r;
+      const sy = actor.y + 0.3 + rand() * 1.6;
+      spark(sx, sy, sz, (actor.x - sx) * 3.2, (actor.y + 1 - sy) * 3.2 + 2.2, (actor.z - sz) * 3.2, actor.team, 0.3);
+    }
+    if (actor.spT <= 0) {
+      actor.spT = 0;
+      releaseSpecial(actor);
+    }
+  }
+
+  /** The explosive part every special shares: instant paint, damage and a shockwave. */
+  function inkBlast(actor: Actor, radius: number, dmg: number) {
+    paint(actor.x, actor.z, radius, actor.team, actor, false);
+    for (let k = 0; k < 12; k++) {
+      const ang = (k / 12) * Math.PI * 2 + rand() * 0.4;
+      const rr = radius * (0.8 + rand() * 0.35);
+      paint(actor.x + Math.cos(ang) * rr, actor.z + Math.sin(ang) * rr, radius * 0.26, actor.team, actor, false);
+    }
+    for (const o of actors) {
+      if (!o.alive || o.team === actor.team) continue;
+      const d = Math.hypot(o.x - actor.x, o.z - actor.z);
+      if (d < radius) hurt(o, dmg * (1 - (d / radius) * 0.5), actor, "splat");
+    }
+    burst(actor.x, actor.y + 0.9, actor.z, actor.team, Math.round(30 + radius * 6), 6 + radius);
+    spawnFx(true, actor.x, actor.y + 0.1, actor.z, actor.team, 0.55, radius, -1);
+    const near = Math.hypot(actor.x - actors[0].x, actor.z - actors[0].z);
+    shake = Math.min(1.2, shake + Math.max(0, 1 - near / 26));
+    if (near < 30) audio.boom(radius / 9);
+  }
+
+  function releaseSpecial(actor: Actor) {
+    const name = SPECIALS.find((s) => s.id === actor.specialId)?.name ?? "";
+    if (actor.isPlayer) setBanner(name);
+    else pushFeed(`${actor.name} — ${name}!`);
+    if (actor.specialId === "burst") {
+      inkBlast(actor, 9, 150);
       return;
     }
-    const hit = castWorld(actor.x, actor.y + 1.3, actor.z, dir.x, dir.y, dir.z, 28);
-    const x = hit ? hit.x : actor.x + dir.x * 12;
-    const z = hit ? hit.z : actor.z + dir.z * 12;
+    inkBlast(actor, 4.5, 70);
+    if (actor.specialId === "reef-rush") {
+      actor.rush = 6;
+      return;
+    }
+    const hit = castWorld(actor.x, actor.y + 1.3, actor.z, actor.spX, actor.spY, actor.spZ, 28);
+    const x = hit ? hit.x : actor.x + actor.spX * 12;
+    const z = hit ? hit.z : actor.z + actor.spZ * 12;
     const zone = zones.find((z0) => !z0.alive) ?? zones[0];
     zone.alive = true;
     zone.x = x;
@@ -1681,10 +2084,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       const mat = mesh.material as THREE.MeshBasicMaterial;
       mat.color.copy(actor.team === 1 ? colO : colV);
     });
-    if (actor.isPlayer) {
-      setBanner("سىياھ بورىنى");
-      audio.chime();
-    } else pushFeed(`${actor.name} — سىياھ بورىنى!`);
   }
 
   function placeBeacon(x: number, y: number, z: number, team: Team, owner: number) {
@@ -1721,10 +2120,12 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       p.alive = false;
       return;
     }
-    if (p.splash > 0 || p.kind === "bomb") splashAt(x, y, z, p.team, p.paintR, p.kind === "bomb" ? p.splash : p.splash, p.splashR, owner);
-    else {
+    if (p.splash > 0 || p.kind === "bomb") {
+      splashAt(x, y, z, p.team, p.paintR, p.splash, p.splashR, owner);
+      if (Math.abs(ny) < 0.62) inkWall(x, y, z, nx, ny, nz, p.paintR * 0.7, p.team);
+    } else {
       paint(x, z, p.paintR, p.team, owner);
-      if (ny < 0.62) addDecal(x, y, z, nx, ny, nz, p.paintR * 0.85, p.team);
+      if (Math.abs(ny) < 0.62) inkWall(x, y, z, nx, ny, nz, p.paintR * 0.85, p.team);
       burst(x, y + 0.1, z, p.team, Math.round(6 * p.scale), 3 * Math.max(1, p.scale * 0.8));
     }
     if (p.kind === "bomb") audio.thud();
@@ -1751,6 +2152,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (p.trailAcc <= 0) {
         p.trailAcc = 0.06;
         paint(p.x, p.z, p.trail, p.team, actors[p.owner] ?? null, false);
+        spark(p.x, p.y, p.z, p.vx * 0.08 + (rand() - 0.5), -0.5, p.vz * 0.08 + (rand() - 0.5), p.team, 0.35);
       }
     }
     const dx = p.x - ox;
@@ -1832,7 +2234,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       resolveActor(a);
     }
     const prevY = a.y;
-    if (!a.swimming) a.vy -= GRAV * dt;
+    if (a.climbing) {
+      /* vy set by the climber */
+    } else if (!a.swimming) a.vy -= GRAV * dt;
     else a.vy = 0;
     let ny = a.y + a.vy * dt;
     const gh = standHeight(a.x, a.z, prevY);
@@ -1878,6 +2282,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (a.subCd > 0) a.subCd -= dt;
   }
 
+  /** Eases actual movement toward the wanted velocity: a snappy start and a soft stop. */
+  function steer(a: Actor, tx: number, tz: number, dt: number, grip: number) {
+    const speeding = tx * tx + tz * tz > a.mvx * a.mvx + a.mvz * a.mvz;
+    const k = 1 - Math.exp(-(speeding ? grip : grip * 0.75) * dt);
+    a.mvx += (tx - a.mvx) * k;
+    a.mvz += (tz - a.mvz) * k;
+  }
+  const gripFor = (a: Actor) => (a.climbing ? 20 : a.swimming ? 16 : a.grounded ? 14 : 5);
+
   function updatePlayer(dt: number, input: InputState) {
     const a = actors[0];
     if (!a.alive) {
@@ -1904,25 +2317,49 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const right = yawRight(a.yaw);
     const floor = teamAt(a.x, a.z);
     const wantSwim = held("ShiftLeft") || held("ShiftRight") || input.swim;
-    a.swimming = !!(wantSwim && a.grounded && floor === a.team && a.rush <= 0);
+    if (a.spT > 0) chargeTick(a, dt);
+    const charging = a.spT > 0;
+    // Swim-climb: hold swim and push into a wall painted in your own ink.
+    const wx = fwd.x * f + right.x * r;
+    const wz = fwd.z * f + right.z * r;
+    const wl = Math.hypot(wx, wz);
+    let climb = false;
+    if (wantSwim && wl > 0.2 && a.rush <= 0 && !charging) {
+      const top = blockerTop(a.x + (wx / wl) * 0.55, a.z + (wz / wl) * 0.55, a.y);
+      if (top >= 0) {
+        // Own ink on the wall at body height; a climber gets a little extra reach, and
+        // once the ledge is within ~1 m they vault over it even if the last bit is bare.
+        const inked = wallTeamAt(a.x + (wx / wl) * 0.42, a.y + 0.4, a.z + (wz / wl) * 0.42, a.climbing ? 0.75 : 0.4) === a.team;
+        climb = inked || (a.climbing && top - a.y < 1.1);
+      }
+    }
+    a.climbing = climb;
+    a.swimming = a.climbing || !!(wantSwim && a.grounded && floor === a.team && a.rush <= 0 && !charging);
     let speed = 6.35 * a.mods.run;
     if (a.swimming) speed = 11.4 * a.mods.swim;
     else if (a.rush > 0) speed = 10.2;
     else if (floor && floor !== a.team) speed = 2.65;
     if (a.weapon === "roller" && (fireMouse || input.fire) && a.grounded) speed *= 0.9;
-    const mx = (fwd.x * f + right.x * r) * speed;
-    const mz = (fwd.z * f + right.z * r) * speed;
-    if (jumpEdge && a.grounded && !a.swimming) {
+    if (charging) speed *= 0.3;
+    const mx = wx * speed;
+    const mz = wz * speed;
+    if (a.climbing) a.vy = 6.4 * a.mods.swim;
+    if (jumpEdge && a.grounded && !a.swimming && !charging) {
       a.vy = 8.5;
       a.grounded = false;
       a.swimming = false;
       audio.blip();
       if (a.weapon === "roller" && (fireMouse || input.fire)) flickRoller(a, playerAim(a), true);
     }
-    moveActor(a, mx, mz, dt);
+    steer(a, mx, mz, dt, gripFor(a));
+    moveActor(a, a.mvx, a.mvz, dt);
     environmentInk(a, dt);
     if (a.swimming) audio.swim(true);
     else audio.swim(false);
+    if (charging) {
+      a.charge = 0;
+      return;
+    }
     const firing = fireMouse || input.fire;
     handlePlayerFire(a, dt, firing);
     if (bombEdge) throwSub(a, playerAim(a), true);
@@ -2039,6 +2476,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       environmentInk(a, dt);
       return;
     }
+    if (a.spT > 0) {
+      chargeTick(a, dt);
+      steer(a, 0, 0, dt, 10);
+      moveActor(a, a.mvx, a.mvz, dt);
+      environmentInk(a, dt);
+      return;
+    }
     const T = tuneFor(a);
     a.think -= dt;
     a.phase += dt;
@@ -2108,7 +2552,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (a.weapon === "roller" && a.mode === "push") speed *= 0.92;
     speed *= T.speed;
     const before = Math.hypot(a.vx, a.vz);
-    moveActor(a, dx * speed, dz * speed, dt);
+    steer(a, dx * speed, dz * speed, dt, gripFor(a) * 0.8);
+    moveActor(a, a.mvx, a.mvz, dt);
     if (before < 0.4 && dist > 2) a.stuck += dt;
     else a.stuck = 0;
     if (a.stuck > 0.8) {
@@ -2150,7 +2595,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (a.special >= 100 && rand() > 0.92) {
       const aim = fireDirection(a, a.x + fwd.x * 10, a.y, a.z + fwd.z * 10);
-      a.specialId = a.weapon === "roller" ? "reef-rush" : "tempest";
+      a.specialId = a.weapon === "roller" ? "reef-rush" : a.weapon === "charger" ? "tempest" : "burst";
       useSpecial(a, aim);
     }
     if (a.subCd <= 0 && a.ink > 40 && nearest && nd < 9 && rand() > 0.97) {
@@ -2185,6 +2630,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.alive = true;
     a.invuln = a.isPlayer ? 2.1 : 1.15;
     a.swimming = false;
+    a.climbing = false;
+    a.spT = 0;
+    a.mvx = 0;
+    a.mvz = 0;
     a.yaw = a.team === 1 ? Math.PI : 0;
     a.charge = 0;
     a.mesh.root.visible = mode === "play";
@@ -2195,6 +2644,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     recount();
     phase = "ended";
     paused = false;
+    // Resolve scoring before the celebration revives a defeated player.
     let winner: "orange" | "violet" | "tie";
     if (bridge.config.current.gameMode === "survival") {
       const orangeLives = actors.filter((a) => a.team === 1).reduce((n, a) => n + a.lives + (a.alive ? 1 : 0), 0);
@@ -2209,6 +2659,30 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
       winner = orangeZone === violetZone ? (Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet") : orangeZone > violetZone ? "orange" : "violet";
     } else winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
+
+    endT = 0;
+    const me = actors[0];
+    if (!me.alive) respawn(me);
+    me.invuln = 0;
+    me.swimming = false;
+    me.climbing = false;
+    me.spT = 0;
+    // Pick the most open direction around the player for the end shot, and turn them to face it.
+    const face = Math.atan2(-Math.sin(me.yaw), -Math.cos(me.yaw));
+    let bestScore = -Infinity;
+    for (const off of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, Math.PI]) {
+      const ang = face + off;
+      const hit = castWorld(me.x, me.y + 1.2, me.z, Math.sin(ang), 0.07, Math.cos(ang), 3.6);
+      const score = (hit ? hit.dist : 3.6) - Math.abs(off) * 0.12;
+      if (score > bestScore) {
+        bestScore = score;
+        endAng = ang;
+      }
+    }
+    me.yaw = endAng + Math.PI;
+    endFromAng = Math.atan2(camPos.x - me.x, camPos.z - me.z);
+    endFromDist = Math.max(1.5, Math.hypot(camPos.x - me.x, camPos.z - me.z));
+    endFromY = camPos.y - me.y;
     const p = actors[0];
     const board = buildBoard();
     const res: NonNullable<HudSnap["result"]> = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths, points: board[0].points, board };
@@ -2236,6 +2710,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     });
     decalCursor = 0;
     decals.count = 0;
+    decalAge.fill(9);
+    wallCursor = 0;
+    footAge.fill(99);
+    footCursor = 0;
+    feet.count = 0;
+    for (const fx of fxPool) {
+      fx.alive = false;
+      fx.mesh.visible = false;
+    }
   }
 
   function setLevel(id: LevelId) {
@@ -2252,6 +2735,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     result = null;
     resultSent = false;
     feed.length = 0;
+    endT = 0;
+    camInit = false;
     hitMark = 0;
     killMark = 0;
     countdown = 3;
@@ -2270,6 +2755,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       p.mesh = makeKid(1, p.name, p.char);
     }
     p.name = cfg.name.trim().slice(0, 16) || "ۋارىس";
+    p.mesh.nameSprite.visible = true;
     p.weapon = cfg.weapon;
     p.sub = cfg.sub;
     p.specialId = cfg.special;
@@ -2291,6 +2777,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.fireCd = 0;
       a.subCd = 0;
       a.swimming = false;
+      a.climbing = false;
+      a.spT = 0;
+      a.mvx = 0;
+      a.mvz = 0;
       a.vy = 0;
       const spots = a.team === 1 ? level.spawnO : level.spawnV;
       const teamSlot = actors.slice(0, idx).filter((other) => other.team === a.team).length;
@@ -2479,59 +2969,158 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       camera.lookAt(0, hy + 1.15, -24);
     }
     if (mode !== "play") return;
+    const ended = phase === "ended";
+    if (ended) endT += dt;
+    const outcome = result ? (result.winner === "orange" ? 1 : result.winner === "violet" ? -1 : 0) : 0;
     for (const a of actors) {
       const m = a.mesh;
       m.root.visible = a.alive;
       if (!a.alive) continue;
       m.root.position.set(a.x, a.y, a.z);
       m.root.rotation.y = a.yaw + Math.PI;
-      const planarSpeed = Math.hypot(a.vx, a.vz);
-      const moving = planarSpeed > 0.8 && a.grounded && !a.swimming;
-      const speed01 = clamp(planarSpeed / 7.2, 0, 1);
+      const speed = Math.hypot(a.vx, a.vz);
+      const moving = speed > 0.8 && a.grounded && !a.swimming;
+      const speed01 = clamp(speed / 7.2, 0, 1);
       const airborne = !a.grounded && !a.swimming;
       const firing = a.fireCd > 0 && !a.swimming;
-      a.phase += dt * (moving ? 9 + speed01 * 7 : a.swimming ? 7 : 2.2);
+      // Cadence and stride follow speed, so easing in and out of a run reads smoothly.
+      a.phase += dt * (moving ? 4 + speed * 1.15 : 2.2);
+      const stride = moving ? Math.min(0.85, 0.2 + speed * 0.1) : 0.04;
+      m.legs.children[0].rotation.x = airborne ? -0.38 : Math.sin(a.phase) * stride;
+      m.legs.children[1].rotation.x = airborne ? 0.48 : Math.sin(a.phase + Math.PI) * stride;
+      const sway = Math.sin(a.phase * 0.6) * 0.12 + (moving ? Math.sin(a.phase) * 0.1 : 0);
+      m.tentL.rotation.z = 0.35 + sway;
+      m.tentR.rotation.z = -0.35 - sway;
       a.recoil = Math.max(0, a.recoil - dt * 7.5);
       a.landKick = Math.max(0, a.landKick - dt * 5.5);
 
-      // Locomotion has weight: stride, torso lean, side sway, jump pose and breathing.
-      const stride = Math.sin(a.phase);
-      const bob = moving ? Math.abs(Math.sin(a.phase)) * 0.065 * speed01 : Math.sin(t * 2.2 + a.phase) * 0.012;
-      m.legs.children[0].rotation.x = airborne ? -0.38 : stride * (moving ? 0.82 : 0.06);
-      m.legs.children[1].rotation.x = airborne ? 0.48 : -stride * (moving ? 0.82 : 0.06);
-      m.tentL.rotation.z = 0.35 + Math.sin(a.phase * 0.6) * (moving ? 0.2 : 0.12);
-      m.tentR.rotation.z = -0.35 - Math.sin(a.phase * 0.6) * (moving ? 0.2 : 0.12);
+      // Swim morph: the humanoid squashes flat, then the squid form pops up in its place.
+      m.swim += ((a.swimming ? 1 : 0) - m.swim) * Math.min(1, dt * 16);
+      const inSquid = m.swim > 0.5;
+      m.body.visible = !inSquid;
+      m.squid.visible = inSquid;
+      const charging = a.spT > 0 ? 1 - a.spT / SPECIAL_CHARGE : 0;
+      if (!inSquid) {
+        const bob = moving ? Math.abs(Math.sin(a.phase)) * 0.065 * speed01 : Math.sin(t * 2.2 + a.phase) * 0.012;
+        const forwardLean = airborne ? -0.18 : moving ? -0.14 * speed01 : 0;
+        const sideLean = moving ? Math.sin(a.phase * 0.5) * 0.045 * speed01 : 0;
+        m.body.scale.set(
+          1 + m.swim * 0.5 + a.landKick * 0.035,
+          Math.max(0.35, 1 - m.swim * 1.3 - a.landKick * 0.05),
+          1 + m.swim * 0.5 + a.landKick * 0.025,
+        );
+        m.body.position.y = bob - a.landKick * 0.06 + charging * 0.45;
+        m.body.rotation.set(forwardLean - a.recoil * 0.05, charging * charging * 9, sideLean);
+        m.torso.scale.set(1, 1 + (moving ? 0 : Math.sin(t * 2.4 + a.phase * 0.1) * 0.03), 1);
+        m.headPivot.rotation.set(Math.sin(t * 1.3 + a.phase) * 0.035 - a.recoil * 0.06, 0, 0);
+        m.armGun.rotation.set(-1.35 + a.recoil * 0.4, 0, 0.05);
+        m.armSup.rotation.set(-1.15 + a.recoil * 0.28 + (moving ? Math.sin(a.phase) * 0.12 : 0), 0, 0.95);
+        m.mount.visible = true;
+        // Retain weapon weight and running motion using the new character's grip position.
+        const weaponWeight = a.weapon === "blaster" ? 1.3 : a.weapon === "charger" ? 0.72 : a.weapon === "roller" ? 0.9 : 1;
+        const gunBob = moving ? Math.sin(a.phase * 2) * 0.045 * speed01 : Math.sin(t * 2.5 + a.phase) * 0.012;
+        m.mount.position.set(
+          0.24 + (moving ? Math.cos(a.phase) * 0.025 * speed01 : 0),
+          1.08 + gunBob,
+          0.3 - a.recoil * 0.13 * weaponWeight,
+        );
+        m.mount.rotation.x = -a.recoil * 0.25 * weaponWeight + (airborne ? 0.12 : 0);
+        m.mount.rotation.z = moving ? -Math.sin(a.phase) * 0.045 * speed01 : 0;
+        if (firing && a.weapon === "spritzer") m.mount.rotation.x += Math.sin(t * 70) * 0.018;
+      } else {
+        const glide = Math.min(1, Math.hypot(a.vx, a.vz, a.climbing ? a.vy : 0) / 8);
+        m.squid.scale.setScalar(0.55 + 0.45 * Math.min(1, (m.swim - 0.5) * 2));
+        m.squid.position.set(0, a.climbing ? 0.55 : 0, a.climbing ? 0.2 : 0);
+        m.squid.rotation.set(a.climbing ? -Math.PI / 2 : 0, 0, Math.sin(t * 9 + a.phase) * 0.14 * glide);
+        m.fins.forEach((f, i) => (f.rotation.y = Math.sin(t * 16 + i * 1.3) * 0.5 * (0.25 + glide)));
+      }
 
-      const forwardLean = a.swimming ? -0.12 : airborne ? -0.18 : moving ? -0.14 * speed01 : 0;
-      const sideLean = moving ? Math.sin(a.phase * 0.5) * 0.045 * speed01 : 0;
-      const recoil = a.recoil;
-      m.body.rotation.x = forwardLean + recoil * 0.08;
-      m.body.rotation.z = sideLean;
-      m.body.position.y = a.swimming ? -0.35 + Math.sin(a.phase) * 0.05 : bob - a.landKick * 0.06;
-      m.body.scale.set(
-        a.swimming ? 1.15 : 1 + a.landKick * 0.035,
-        a.swimming ? 0.42 : 1 - a.landKick * 0.05,
-        a.swimming ? 1.35 : 1 + a.landKick * 0.025,
-      );
-      m.legs.visible = !a.swimming;
-      m.mount.visible = !a.swimming;
+      // Eyes: a blink every few seconds.
+      m.blink -= dt;
+      if (m.blink < -0.12) m.blink = 2 + rand() * 3.5;
+      const lid = m.blink < 0 ? 0.12 : 1;
+      m.eyes.forEach((e) => {
+        e.scale.set(1, lid, 1);
+        e.rotation.z = 0;
+      });
 
-      // Weapon action: running bob + breathing + visible kickback when a shot leaves the muzzle.
-      // Different weapon weights get different motion so the gun does not feel glued to the torso.
-      const weaponWeight = a.weapon === "blaster" ? 1.3 : a.weapon === "charger" ? 0.72 : a.weapon === "roller" ? 0.9 : 1;
-      const gunBob = moving ? Math.sin(a.phase * 2) * 0.045 * speed01 : Math.sin(t * 2.5 + a.phase) * 0.012;
-      m.mount.position.set(
-        0.22 + (moving ? Math.cos(a.phase) * 0.025 * speed01 : 0),
-        0.98 + gunBob,
-        0.18 + recoil * 0.12 * weaponWeight,
-      );
-      m.mount.rotation.x = -0.08 - recoil * 0.16 * weaponWeight + (airborne ? 0.12 : 0);
-      m.mount.rotation.z = moving ? -stride * 0.045 * speed01 : 0;
-      if (firing && a.weapon === "spritzer") m.mount.rotation.x += Math.sin(t * 70) * 0.018;
-      const blink = a.invuln > 0 && Math.sin(t * 24) > 0;
-      m.root.visible = !blink;
+      const flicker = a.invuln > 0 && a.spT <= 0 && !ended && Math.sin(t * 24) > 0;
+      m.root.visible = !flicker;
       const roll = m.weapons.roller.getObjectByName("roll");
-      if (roll && a.weapon === "roller") roll.rotation.x += Math.hypot(a.vx, a.vz) * dt * 2.2;
+      if (roll && a.weapon === "roller") roll.rotation.x += speed * dt * 2.2;
+
+      if (ended) continue;
+      // Ink footprints while running, and a spray of droplets behind a swimmer.
+      const f = yawForward(a.yaw);
+      if (moving) {
+        a.stepAcc += speed * dt;
+        if (a.stepAcc > 0.85) {
+          a.stepAcc = 0;
+          a.stepSide = -a.stepSide;
+          const r = yawRight(a.yaw);
+          addFoot(a.x + r.x * 0.12 * a.stepSide, a.y + 0.03, a.z + r.z * 0.12 * a.stepSide, a.yaw, a.team);
+        }
+        if (rand() < dt * 5) spark(a.x - f.x * 0.3, a.y + 0.4, a.z - f.z * 0.3, (rand() - 0.5) * 1.2, 1.2, (rand() - 0.5) * 1.2, a.team, 0.5);
+      }
+      if (a.swimming && speed > 2 && rand() < dt * 50) {
+        const back = a.climbing ? 0 : 0.5;
+        spark(
+          a.x - f.x * back + (rand() - 0.5) * 0.3,
+          a.y + (a.climbing ? 0.4 : 0.15),
+          a.z - f.z * back + (rand() - 0.5) * 0.3,
+          -f.x * speed * 0.15 + (rand() - 0.5),
+          1.5 + rand() * 1.5,
+          -f.z * speed * 0.15 + (rand() - 0.5),
+          a.team,
+          0.45,
+        );
+      }
+    }
+
+    // Final whistle: the player celebrates or sulks while the camera swings round to their face.
+    const me = actors[0];
+    if (ended && me.alive) {
+      const m = me.mesh;
+      const e = endT;
+      m.swim = 0;
+      m.body.visible = true;
+      m.squid.visible = false;
+      m.mount.visible = false;
+      m.nameSprite.visible = false;
+      m.body.scale.set(1, 1, 1);
+      m.root.visible = true;
+      if (outcome > 0) {
+        m.body.position.y = Math.abs(Math.sin(e * 5.5)) * 0.5;
+        m.body.rotation.set(0, Math.sin(e * 2.2) * 0.35, 0);
+        m.armGun.rotation.set(-2.75 + Math.sin(e * 11) * 0.25, 0, -0.35);
+        m.armSup.rotation.set(-2.75 + Math.sin(e * 11 + 1.2) * 0.25, 0, 0.35);
+        m.headPivot.rotation.set(-0.18, 0, Math.sin(e * 5.5) * 0.08);
+        m.tentL.rotation.z = 0.35 + Math.sin(e * 14) * 0.35;
+        m.tentR.rotation.z = -0.35 - Math.sin(e * 14) * 0.35;
+        m.eyes.forEach((eye) => eye.scale.set(1.05, 0.28, 1));
+        if (Math.floor(e / 0.32) !== Math.floor((e - dt) / 0.32)) {
+          burst(me.x + (rand() - 0.5), me.y + 2.4, me.z + (rand() - 0.5), rand() > 0.35 ? 1 : 2, 14, 5);
+        }
+      } else if (outcome < 0) {
+        m.body.position.y = 0;
+        m.body.rotation.set(0.22, Math.sin(e * 0.9) * 0.12, 0);
+        m.headPivot.rotation.set(0.5 + Math.sin(e * 1.6) * 0.05, 0, 0);
+        m.armGun.rotation.set(-0.18, 0, 0.14);
+        m.armSup.rotation.set(-0.18, 0, -0.14);
+        m.torso.scale.set(1, 1 + Math.sin(e * 1.4) * 0.05, 1);
+        m.tentL.rotation.z = 0.08;
+        m.tentR.rotation.z = -0.08;
+        m.eyes.forEach((eye, i) => {
+          eye.scale.set(1, 0.5, 1);
+          eye.rotation.z = i === 0 ? 0.35 : -0.35;
+        });
+      } else {
+        m.body.position.y = Math.abs(Math.sin(e * 2.5)) * 0.12;
+        m.body.rotation.set(0, 0, Math.sin(e * 2.5) * 0.08);
+        m.armGun.rotation.set(-0.7, 0, -0.9);
+        m.armSup.rotation.set(-0.7, 0, 0.9);
+        m.headPivot.rotation.set(0, 0, Math.sin(e * 2.5) * 0.15);
+      }
     }
     const player = actors[0];
     if (player.weapon === "charger" && player.charge > 0.02 && player.alive && mode === "play") {
@@ -2554,8 +3143,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       const p = projs[i];
       if (!p.alive) continue;
       dummy.position.set(p.x, p.y, p.z);
-      dummy.scale.setScalar(0.18 * p.scale);
-      dummy.rotation.set(0, 0, 0);
+      const sp = Math.hypot(p.vx, p.vy, p.vz);
+      if (sp > 0.5) dummy.quaternion.setFromUnitVectors(zV, tmpN.set(p.vx / sp, p.vy / sp, p.vz / sp));
+      else dummy.quaternion.identity();
+      const s0 = 0.18 * p.scale;
+      dummy.scale.set(s0, s0, s0 * (1 + Math.min(4.5, sp * 0.11)));
       dummy.updateMatrix();
       shotMesh.setMatrixAt(shown, dummy.matrix);
       shotMesh.setColorAt(shown, p.team === 1 ? colO : colV);
@@ -2675,10 +3267,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     for (let i = 0; i < PMAX; i++) {
       if (pLife[i] <= 0) continue;
       pLife[i] -= dt;
-      pVel[i * 3 + 1] -= 8 * dt;
+      pVel[i * 3 + 1] -= 14 * dt;
       pPos[i * 3] += pVel[i * 3] * dt;
       pPos[i * 3 + 1] += pVel[i * 3 + 1] * dt;
       pPos[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+      // Soft bounce: droplets hop off the ground a couple of times before fading.
+      if (pPos[i * 3 + 1] < pFloor[i] && pVel[i * 3 + 1] < 0) {
+        pPos[i * 3 + 1] = pFloor[i];
+        pVel[i * 3 + 1] *= -0.45;
+        pVel[i * 3] *= 0.7;
+        pVel[i * 3 + 2] *= 0.7;
+      }
       if (pLife[i] <= 0) pPos[i * 3 + 1] = -40;
     }
     pGeo.attributes.position.needsUpdate = true;
@@ -2688,31 +3287,73 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
   }
 
+  const camPos = new THREE.Vector3();
+  const camLook = new THREE.Vector3();
+  const camWant = new THREE.Vector3();
+  const lookWant = new THREE.Vector3();
+  let camInit = false;
+
+  /** Follows the player with gentle easing; after the whistle it swings round to face them. */
   function updateCamera(dt: number) {
-    if (mode !== "play") return;
+    if (mode !== "play") {
+      camInit = false;
+      return;
+    }
     const a = actors[0];
-    const dist = a.swimming ? 3.5 : 4.7;
-    const cp = Math.cos(a.pitch);
-    const sp = Math.sin(a.pitch);
     const f = yawForward(a.yaw);
     const r = yawRight(a.yaw);
-    const headY = a.y + (a.swimming ? 0.7 : 1.35);
-    let cx = a.x - f.x * dist * cp + r.x * 0.62;
-    let cy = headY + dist * sp * 0.75 + 0.25;
-    let cz = a.z - f.z * dist * cp + r.z * 0.62;
-    // castWorld measures distance along its direction, so the ray must be unit length;
-    // an unnormalised one probed ~4.7x too far and snapped the camera in near any wall.
-    const boom = Math.hypot(cx - a.x, cy - headY, cz - a.z) || 1;
-    const hit = castWorld(a.x, headY, a.z, (cx - a.x) / boom, (cy - headY) / boom, (cz - a.z) / boom, boom);
-    if (hit && hit.dist < boom) {
-      const sc = Math.max(0.25, (hit.dist - 0.25) / boom);
-      cx = a.x + (cx - a.x) * sc;
-      cy = headY + (cy - headY) * sc;
-      cz = a.z + (cz - a.z) * sc;
+    const ended = phase === "ended";
+    if (ended) {
+      // Orbit round to the front on an arc (a straight line would pass through the player).
+      const k = Math.min(1, endT / 1.1);
+      const e = k * k * (3 - 2 * k);
+      const target = endAng + Math.sin(endT * 0.4) * 0.25 * e;
+      const dA = Math.atan2(Math.sin(target - endFromAng), Math.cos(target - endFromAng));
+      const ang = endFromAng + dA * e;
+      const dx = Math.sin(ang);
+      const dz = Math.cos(ang);
+      let reach = endFromDist + (3.4 - endFromDist) * e;
+      const hit = castWorld(a.x, a.y + 1.2, a.z, dx, 0.07, dz, reach);
+      if (hit) reach = Math.max(1.2, hit.dist - 0.3);
+      camPos.set(a.x + dx * reach, a.y + endFromY + (1.45 - endFromY) * e, a.z + dz * reach);
+      // Look a little to the player's side so they stand right of centre, clear of the results panel.
+      lookWant.set(a.x + r.x * 0.85 * e, a.y + 1.0, a.z + r.z * 0.85 * e);
+      camLook.lerp(lookWant, 1 - Math.exp(-6 * dt));
+      camera.position.copy(camPos);
+      camera.lookAt(camLook);
+      return;
+    } else {
+      const dist = a.swimming ? 3.6 : 4.6;
+      const cp = Math.cos(a.pitch);
+      const sp = Math.sin(a.pitch);
+      const headY = a.y + (a.swimming ? 0.7 : 1.35);
+      let cx = a.x - f.x * dist * cp + r.x * 0.3;
+      let cy = headY + dist * sp * 0.75 + 0.25;
+      let cz = a.z - f.z * dist * cp + r.z * 0.3;
+      // castWorld measures distance along its direction, so the ray must be unit length.
+      const boom = Math.hypot(cx - a.x, cy - headY, cz - a.z) || 1;
+      const hit = castWorld(a.x, headY, a.z, (cx - a.x) / boom, (cy - headY) / boom, (cz - a.z) / boom, boom);
+      if (hit && hit.dist < boom) {
+        const sc = Math.max(0.25, (hit.dist - 0.25) / boom);
+        cx = a.x + (cx - a.x) * sc;
+        cy = headY + (cy - headY) * sc;
+        cz = a.z + (cz - a.z) * sc;
+      }
+      camWant.set(cx, cy, cz);
+      lookWant.set(a.x + f.x * 1.4, headY - 0.15 + sp * 1.3, a.z + f.z * 1.4);
+    }
+    // Snap on teleports (match start, respawn); otherwise ease toward the target.
+    if (!camInit || camPos.distanceToSquared(camWant) > 64) {
+      camPos.copy(camWant);
+      camLook.copy(lookWant);
+      camInit = true;
+    } else {
+      camPos.lerp(camWant, 1 - Math.exp(-(ended ? 3 : 14) * dt));
+      camLook.lerp(lookWant, 1 - Math.exp(-(ended ? 4 : 24) * dt));
     }
     shake = Math.max(0, shake * Math.exp(-3.5 * dt));
-    camera.position.set(cx + (rand() - 0.5) * shake * 0.28, cy + (rand() - 0.5) * shake * 0.2, cz);
-    camera.lookAt(a.x + f.x * 1.4, headY - 0.15 + sp * 1.3, a.z + f.z * 1.4);
+    camera.position.set(camPos.x + (rand() - 0.5) * shake * 0.28, camPos.y + (rand() - 0.5) * shake * 0.2, camPos.z);
+    camera.lookAt(camLook);
   }
 
   function resize() {
@@ -2749,6 +3390,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   let queueBomb = false;
+  // Taps are latched at keydown: a press shorter than one frame still counts.
+  let queueJump = false;
+  let queueSpecial = false;
   let bombLatch = false;
   let specialLatch = false;
 
@@ -2758,11 +3402,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const fire = fireMouse || input.fire;
     const bomb = held("KeyC") || input.bomb;
     const special = held("KeyF") || input.special;
-    jumpEdge = jump && !prevJump;
+    jumpEdge = queueJump || (jump && !prevJump);
     fireRelease = !fire && prevFire;
     bombEdge = queueBomb || (bomb && !bombLatch);
-    specialEdge = special && !specialLatch;
+    specialEdge = queueSpecial || (special && !specialLatch);
     queueBomb = false;
+    queueJump = false;
+    queueSpecial = false;
     prevJump = jump;
     prevFire = fire;
     bombLatch = bomb;
@@ -2807,6 +3453,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     updateCamera(dt);
     syncVisuals(dt);
+    updateFx(dt);
+    popDecals(dt);
+    updateFeet(dt);
     miniAcc += dt;
     if (miniAcc > 0.18 && mode === "play") {
       miniAcc = 0;
@@ -2829,6 +3478,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (typing()) return;
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
     keys.add(e.code);
+    if (!e.repeat && mode === "play" && !paused) {
+      if (e.code === "Space") queueJump = true;
+      else if (e.code === "KeyF") queueSpecial = true;
+      else if (e.code === "KeyC") queueBomb = true;
+    }
     if (e.code === "Escape") {
       if (e.repeat) return;
       if (mode === "play" && phase !== "ended" && !paused) setPaused(true);
@@ -3164,6 +3818,43 @@ function createAudio() {
         lp.disconnect();
         g.disconnect();
       };
+    },
+    /** A rising, wobbling whine while a special winds up. */
+    charge(len: number) {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const lfo = ctx.createOscillator();
+      const depth = ctx.createGain();
+      const g = ctx.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(160, t);
+      o.frequency.exponentialRampToValueAtTime(880, t + len);
+      lfo.frequency.value = 18;
+      depth.gain.value = 40;
+      lfo.connect(depth);
+      depth.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.07, t + len * 0.8);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len + 0.05);
+      o.connect(g);
+      g.connect(sfx);
+      o.start(t);
+      lfo.start(t);
+      o.stop(t + len + 0.08);
+      lfo.stop(t + len + 0.08);
+      o.onended = () => {
+        o.disconnect();
+        lfo.disconnect();
+        depth.disconnect();
+        g.disconnect();
+      };
+    },
+    /** The special's burst: a deep thump under a big wet splash. */
+    boom(size: number) {
+      if (!ctx || !sfx || ctx.state !== "running") return;
+      tone(sfx, "sine", 120, ctx.currentTime, 0.22 + size * 0.12, 0.5, 38);
+      this.splash(Math.min(1, 0.6 + size * 0.4));
     },
     /** Speeds the music up for the final minute. */
     setTempo(fast: boolean) {

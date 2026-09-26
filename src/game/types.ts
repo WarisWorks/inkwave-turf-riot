@@ -1,6 +1,6 @@
 export type WeaponId = "spritzer" | "roller" | "charger" | "blaster";
 export type SubId = "pop-bomb" | "ink-beacon";
-export type SpecialId = "tempest" | "reef-rush";
+export type SpecialId = "burst" | "tempest" | "reef-rush";
 export type Quality = "low" | "high";
 export type Difficulty = "easy" | "normal" | "hard";
 export type GameMode = "turf" | "zone" | "survival";
@@ -152,6 +152,11 @@ export const SUBS: { id: SubId; name: string; blurb: string }[] = [
 ];
 
 export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
+  {
+    id: "burst",
+    name: "سىياھ پارتلىشى",
+    blurb: "قىسقا كۈچ يىغىپ، ئەتراپىڭىزدىكى كەڭ زېمىننى بىراقلا سىياھقا چۆمدۈرىدۇ ۋە يېقىندىكى رەقىبلەرنى چاچرىتىدۇ.",
+  },
   { id: "tempest", name: "سىياھ بورىنى", blurb: "يامغۇر بۇلۇتى چوڭ بىر دائىرە زېمىننى سىياھقا چىلايدۇ." },
   { id: "reef-rush", name: "مەرجان يۈگۈرۈشى", blurb: "خالىغان يەرگە ئۇچقاندەك يۈگۈرۈپ، ئارقىڭىزدا بويالغان ئىز قالدۇرۇڭ." },
 ];
