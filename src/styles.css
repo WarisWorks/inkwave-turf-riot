@@ -598,3 +598,18 @@
     transform: none;
   }
 }
+
+.environment-perf {
+  position: fixed;
+  z-index: 100;
+  bottom: 12px;
+  right: 12px;
+  padding: 10px 14px;
+  border: 1px solid #a8c9c966;
+  border-radius: 8px;
+  background: #102033e8;
+  color: #e1f2e6;
+  font: 12px/1.6 ui-monospace, monospace;
+  white-space: pre;
+  pointer-events: none;
+}

@@ -1,4 +1,8 @@
 import type { LevelId } from "./types";
+import { URUMQI_PRIMS } from "./environment/urumqiLayout";
+import { KASHGAR_PRIMS } from "./environment/kashgarLayout";
+import { TURPAN_VINE_ROWS } from "./environment/turpanLayout";
+import { OASIS_TERRACES, OASIS_FORTS } from "./environment/oasisLayout";
 
 export type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -6,12 +10,12 @@ export type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 export const MAP = { minX: -30, minZ: -38, w: 60, d: 76 };
 
 /**
- * Level building blocks. Boxes use a centre position (like the original harbor code).
+ * Level building blocks. Boxes use a centre position.
  * `deco` pieces use a plain lit material so ground ink never tints them, and are not solid.
  */
 export type Prim =
-  | { t: "box"; x: number; y: number; z: number; w: number; h: number; d: number; c: number; deco?: boolean }
-  | { t: "stairs"; x: number; z: number; dir: 1 | -1; w: number; h: number; run: number; steps: number; c: number }
+  | { t: "box"; x: number; y: number; z: number; w: number; h: number; d: number; c: number; deco?: boolean; collisionOnly?: boolean; paintable?: boolean }
+  | { t: "stairs"; x: number; z: number; dir: 1 | -1; w: number; h: number; run: number; steps: number; c: number; base?: number }
   | { t: "palm"; x: number; z: number }
   | { t: "poplar"; x: number; z: number }
   | { t: "dome"; x: number; y: number; z: number; r: number; c: number }
@@ -74,58 +78,6 @@ const flip = (spawns: [number, number][]) => spawns.map(([x, z]) => [-x, -z] as 
 
 
 
-/** Elevated links and market pockets make the old city read as one connected combat space. */
-function roofBridge(x: number, z: number, w: number, alongX = true): Prim[] {
-  return alongX
-    ? [box(x, 3.05, z, w, 0.32, 1.8, 0x8b5739), box(x, 3.55, z - 0.8, w, 0.65, 0.16, 0x245f73, true), box(x, 3.55, z + 0.8, w, 0.65, 0.16, 0x245f73, true)]
-    : [box(x, 3.05, z, 1.8, 0.32, w, 0x8b5739), box(x - 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true), box(x + 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true)];
-}
-function marketCluster(x: number, z: number): Prim[] {
-  return [
-    box(x - 2.1, 0.7, z, 3.2, 1.4, 2.2, 0x9a613b),
-    box(x - 2.1, 1.62, z, 3.8, 0.14, 2.8, 0xc8102e, true),
-    box(x + 2.0, 0.65, z + 0.4, 3.0, 1.3, 2.0, 0x9a613b),
-    box(x + 2.0, 1.52, z + 0.4, 3.6, 0.14, 2.6, 0x168f86, true),
-    box(x - 2.8, 0.38, z - 1.7, 0.9, 0.76, 0.9, 0xe0a15a),
-    box(x + 2.7, 0.4, z - 1.5, 1.0, 0.8, 1.0, 0xb5652b),
-  ];
-}
-function rooftopPavilion(x: number, z: number): Prim[] {
-  return [
-    box(x - 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
-    box(x + 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
-    box(x - 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
-    box(x + 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
-    box(x, 3.0, z, 5.1, 0.18, 4.1, 0x168f86, true),
-    box(x, 3.22, z, 5.5, 0.16, 4.5, 0xf2c230, true),
-  ];
-}
-
-/** Dense playable old-city block: low roofs are reachable and the gaps become combat alleys. */
-function oldCityBlock(x: number, z: number, flipZ = false): Prim[] {
-  const dir = flipZ ? -1 : 1;
-  return [
-    box(x, 1.35, z, 7.5, 2.7, 5.5, 0xd39a68),
-    box(x, 2.82, z, 8.0, 0.22, 6.0, 0x8f5738, true),
-    stairs(x + 4.4, z + dir * 1.8, dir as 1 | -1, 3.2, 2.7, 5.2, 6, 0xc78a5a),
-    box(x - 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
-    box(x, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
-    box(x + 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
-    box(x - 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
-    box(x + 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
-    box(x, 3.95, z, 7.2, 0.16, 5.3, 0x6b4226, true),
-  ];
-}
-/** Bazaar arcade used as actual cover/chokepoint rather than background dressing. */
-function bazaarArcade(x: number, z: number): Prim[] {
-  const p: Prim[] = [box(x, 3.4, z, 10, 0.35, 3.4, 0xc98250, true)];
-  for (let i = -2; i <= 2; i++) {
-    p.push(box(x + i * 2.2, 1.55, z, 0.48, 3.1, 0.48, 0xb9784b));
-    p.push({ t: "dome", x: x + i * 2.2, y: 3.08, z, r: 0.55, c: 0x168f86 });
-  }
-  return p;
-}
-
 /** Decorative Uyghur architectural vocabulary built from cheap primitives.
  * These stay mostly at the arena edges so silhouettes become culturally distinct
  * without closing important combat lanes.
@@ -169,212 +121,44 @@ function grapeHouse(x: number, z: number): Prim[] {
   return parts;
 }
 
-/* ── پورت · Harbor (the original map) ─────────────────────────────── */
-
-const harborCrates: [number, number, number, number, number][] = [
-  [0, -15, 1.5, 1.05, 1.5],
-  [-8, -12, 1.7, 1.15, 1.2],
-  [7, -13, 1.2, 0.85, 1.9],
-  [3, -9, 1.6, 0.7, 1.1],
-  [-2, 13, 1.6, 1.05, 1.6],
-  [9, 11, 1.3, 1.2, 1.3],
-  [-11, 15, 2.2, 0.9, 1.2],
-  [-7, 9, 1.1, 0.75, 1.7],
-  [16, -10, 1.5, 1.05, 1.4],
-  [-16, 10, 1.3, 1.0, 2.1],
-  [11, 18, 1.4, 0.8, 1.4],
-  [-2, -18, 1.2, 0.9, 1.2],
-];
-
-const HARBOR: LevelDef = {
-  id: "harbor",
-  sky: 0x8fd4ff,
-  fog: 0xcfe9ff,
-  ground: 0xf0d2ae,
-  wall: 0xf6ecdf,
-  water: 0x1498b8,
-  channel: {
-    rect: { minX: -28.2, maxX: 28.2, minZ: -4.45, maxZ: 4.45 },
-    crossings: [
-      [-18, 2.8],
-      [0, 3.8],
-      [18, 2.8],
-    ],
-  },
+/* ── ئۈرۈمچى · Urumqi bazaar square ─────────────────────────────── */
+const URUMQI: LevelDef = {
+  id: "urumqi",
+  sky: 0xb7d7e7, fog: 0xd4d4c8, ground: 0xd6cbb6,
+  wall: 0xbda17f, wallCap: 0x37878b, water: 0x48a5b1,
   pools: [],
-  spawnO: [
-    [-20, -28],
-    [-4, -31],
-    [4, -30],
-    [8, -27],
-  ],
-  spawnV: [
-    [20, 23],
-    [-4, 31],
-    [4, 30],
-    [-8, 28],
-  ],
-  prims: [
-    // Even the harbor carries Uyghur old-town architecture around its perimeter.
-    ...uyghurGate(0, -35, 0xd9a06c, 0x237d82),
-    ...uyghurGate(0, 35, 0xd9a06c, 0x237d82),
-    ...courtyardFacade(-22, -36, 10, 0xd5a171),
-    ...courtyardFacade(22, 36, 10, 0xd5a171),
-    box(-20, 1.15, -27, 14, 2.3, 14, 0xffd7b4),
-    stairs(-20, -20, 1, 10, 2.3, 6.6, 4, 0xe7d3c0),
-    box(20.5, 2.1, -25.5, 13, 4.2, 15, 0xffe3c8),
-    box(20.5, 4.28, -25.5, 13.4, 0.28, 15.4, 0xff6a1a),
-    box(0, 1.25, 0, 10, 2.5, 12, 0xc9d7e8),
-    box(0, 2.72, 0, 10.4, 0.28, 12.3, 0xeef3f8),
-    stairs(0, -6, -1, 10, 2.5, 6.4, 4, 0xd5deea),
-    stairs(0, 6, 1, 10, 2.5, 6.4, 4, 0xd5deea),
-    box(-18, 0.31, 0, 8, 0.62, 10, 0xd7a15e),
-    box(18, 0.31, 0, 8, 0.62, 10, 0xd7a15e),
-    box(20, 0.7, 23, 14, 1.4, 14, 0xd9e6ff),
-    stairs(20, 16, -1, 10, 1.4, 5.6, 3, 0xc9d8ee),
-    box(-20.5, 2, 25.5, 13, 4, 15, 0xd5e4ff),
-    box(-20.5, 4.1, 25.5, 13.4, 0.26, 15.4, 0x5b4dff),
-    ...harborCrates.map((c, i) => box(c[0], c[3] / 2, c[1], c[2], c[3], c[4], i % 2 === 0 ? 0xe0a15a : 0x7ec8e3)),
-    box(-9.2, 0.38, 0.4, 2.4, 0.36, 1.1, 0xf2f5f8, true),
-    box(9.4, 0.42, -0.6, 2.6, 0.4, 1.15, 0xfff1df, true),
-    ...(
-      [
-        [-28.4, -12],
-        [-28.2, 8],
-        [28.4, -14],
-        [28.2, 6],
-        [-12, -36.2],
-        [8, -36.3],
-        [-8, 36.2],
-        [14, 36.1],
-        [28.3, 22],
-        [-28.4, 24],
-      ] as [number, number][]
-    ).map(([x, z]) => palm(x, z)),
-  ],
+  spawnO: [[-8, -34], [-4, -32], [0, -34], [4, -32], [8, -34], [0, -36]],
+  spawnV: flip([[-8, -34], [-4, -32], [0, -34], [4, -32], [8, -34], [0, -36]]),
+  prims: URUMQI_PRIMS,
 };
 
 /* ── قەشقەر بازىرى · Kashgar Bazaar ───────────────────────────────── */
 
-const TILE = 0x1f9e8f;
-const BRICK = 0xd99a62;
-const AWNINGS = [0xc8102e, TILE, 0xf2c230, 0x3a9a4a];
-
-function stall(x: number, z: number, i: number): Prim[] {
-  return [
-    box(x, 0.55, z, 2.6, 1.1, 2.2, 0xa8683a),
-    box(x - 0.6, 1.25, z, 0.7, 0.3, 0.7, 0xf2c230, true),
-    box(x + 0.6, 1.25, z, 0.7, 0.3, 0.7, 0xc8102e, true),
-    box(x, 2.45, z, 3.2, 0.12, 2.8, AWNINGS[i % AWNINGS.length], true),
-  ];
-}
-
 const BAZAAR: LevelDef = {
   id: "bazaar",
-  sky: 0x9ed8ff,
-  fog: 0xf3e4cc,
-  ground: 0xe6c497,
-  wall: 0xc9784a,
-  wallCap: TILE,
-  water: 0x3fb6d9,
-  pools: [{ minX: -3.2, maxX: 3.2, minZ: -3.2, maxZ: 3.2 }],
-  spawnO: [
-    [-8, -30],
-    [-3, -32],
-    [3, -31],
-    [8, -29],
-  ],
-  spawnV: flip([
-    [-8, -30],
-    [-3, -32],
-    [3, -31],
-    [8, -29],
-  ]),
-  prims: [
-    // Strong Kashgar silhouette: ceremonial gates, courtyard façades and edge minarets.
-    ...uyghurGate(0, -34, 0xd59a63, TILE),
-    ...uyghurGate(0, 34, 0xd59a63, TILE),
-    ...courtyardFacade(-20, -36, 12, 0xd49a67),
-    ...courtyardFacade(20, 36, 12, 0xd49a67),
-    ...minaret(-27.5, -31, BRICK, TILE),
-    ...minaret(27.5, 31, BRICK, TILE),
-    // Dense playable old-city fabric: roofs, stairs and alleys are part of the fight.
-    ...oldCityBlock(-19, -24),
-    ...oldCityBlock(18, -23),
-    ...oldCityBlock(-18, 22, true),
-    ...oldCityBlock(19, 24, true),
-    ...oldCityBlock(-22, 9),
-    ...oldCityBlock(22, -8, true),
-    ...bazaarArcade(0, -25),
-    ...bazaarArcade(0, 25),
-    // Rooftop circulation and dense street life: the architecture IS the arena.
-    ...roofBridge(-9, -23, 9, true),
-    ...roofBridge(9, 23, 9, true),
-    ...roofBridge(-20, 15, 9, false),
-    ...roofBridge(20, -15, 9, false),
-    ...rooftopPavilion(-18, -23),
-    ...rooftopPavilion(18, 23),
-    ...marketCluster(-8, -17),
-    ...marketCluster(9, 16),
-    ...marketCluster(13, -6),
-    ...marketCluster(-13, 6),
-    box(-9, 1.0, -5, 8, 2.0, 1.0, 0xd6a06d),
-    box(10, 0.8, 6, 7, 1.6, 1.0, 0xc98b5a),
-    box(-5, 1.15, 13, 1.0, 2.3, 7, 0xd6a06d),
-    box(6, 0.95, -13, 1.0, 1.9, 7, 0xc98b5a),
-    // Central fountain: a tiled rim you have to hop over, and a domed spout.
-    box(0, 0.45, -3.6, 8, 0.9, 0.8, TILE),
-    box(0, 0.45, 3.6, 8, 0.9, 0.8, TILE),
-    box(-3.6, 0.45, 0, 0.8, 0.9, 6.4, TILE),
-    box(3.6, 0.45, 0, 0.8, 0.9, 6.4, TILE),
-    box(0, 1.1, 0, 1, 2.2, 1, 0xf2e3c6),
-    { t: "dome", x: 0, y: 2.2, z: 0, r: 0.75, c: TILE },
-    ...sym([
-      // Caravanserai rooftop: the high ground on each side.
-      box(-19, 1.6, -14, 10, 3.2, 8, BRICK),
-      box(-19, 3.28, -14, 10.4, 0.16, 8.4, TILE),
-      stairs(-19, -10, 1, 6, 3.2, 5.6, 7, 0xe3b27e),
-      // Domed tower.
-      box(-26, 2.5, -2, 4, 5, 4, BRICK),
-      { t: "dome", x: -26, y: 5, z: -2, r: 2, c: TILE },
-      // Gate arch in front of each base.
-      box(-4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
-      box(4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
-      box(0, 3.9, -20, 10, 0.6, 1.1, TILE),
-      // Market stalls with striped awnings. These fill the playable streets, not only the perimeter.
-      ...stall(-11, -24, 0),
-      ...stall(-11, -18, 1),
-      ...stall(11, -24, 2),
-      ...stall(11, -18, 3),
-      ...stall(-6, -10, 1),
-      ...stall(7, -11, 2),
-      ...stall(15, -4, 0),
-      // Spice sacks.
-      box(-2, 0.45, -15, 1.3, 0.9, 1.3, 0xb5652b),
-      box(3, 0.5, -16, 1.2, 1.0, 1.2, 0xe0b04a),
-      box(-14, 0.5, -27, 1.4, 1.0, 1.4, 0xb5652b),
-      box(17, 0.45, -28, 1.3, 0.9, 1.3, 0xe0b04a),
-      box(-9, 0.55, -3, 1.4, 1.1, 1.4, 0xb5652b),
-      poplar(-28.6, -24),
-      poplar(-28.6, -12),
-      poplar(28.6, -24),
-      poplar(28.6, -12),
-    ]),
-  ],
+  sky: 0xb7d5dc,
+  fog: 0xe3cbb0,
+  ground: 0xd2bc99,
+  wall: 0xc4946c,
+  wallCap: 0x278c91,
+  water: 0x42afbd,
+  pools: [{ minX: -2.5, maxX: 2.5, minZ: -2.5, maxZ: 2.5 }],
+  spawnO: [[-8, -32], [-4, -34], [0, -32], [4, -34], [8, -32], [0, -36]],
+  spawnV: flip([[-8, -32], [-4, -34], [0, -32], [4, -34], [8, -32], [0, -36]]),
+  prims: KASHGAR_PRIMS,
 };
 
 /* ── تەكلىماكان ۋاھەسى · Taklamakan Oasis ────────────────────────── */
 
-const SAND = [0xeac27f, 0xe4b873, 0xdcae68];
 const RUIN = 0xc9955e;
 
 const OASIS: LevelDef = {
   id: "oasis",
-  sky: 0xa9dcff,
-  fog: 0xf7dfae,
-  ground: 0xf0cf8e,
-  wall: 0xd4a86a,
-  water: 0x2fb3a0,
+  sky: 0xc8d9dc,
+  fog: 0xf0d6ad,
+  ground: 0xe6c58c,
+  wall: 0xcba16a,
+  water: 0x36a6a1,
   pools: [{ minX: -6, maxX: 6, minZ: -4, maxZ: 4 }],
   spawnO: [
     [-8, -30],
@@ -396,19 +180,12 @@ const OASIS: LevelDef = {
     ...courtyardFacade(18, 36, 11, 0xc18a58),
     ...minaret(-27, 30, 0xb77d4d, 0x2b8c7f),
     ...minaret(27, -30, 0xb77d4d, 0x2b8c7f),
+    ...OASIS_TERRACES.map((t) => box(t.x, t.y, t.z, t.w, t.h, t.d, t.color)),
+    ...OASIS_FORTS.flatMap(({ x, z }) => [-1, 1].flatMap((side) => [-1, 1].map((end): Prim => ({
+      t: "box", x: x + side * 3.3, y: 3.115, z: z + end * 2.9,
+      w: 0.95, h: 0.63, d: 0.95, c: RUIN, collisionOnly: true,
+    })))),
     ...sym([
-      // Palms ringing the pond.
-      palm(-8, -5.5),
-      palm(7.5, -6),
-      palm(0, -6.5),
-      // Dunes: 0.45 m terraces you can walk straight up.
-      box(-16, 0.225, -14, 12, 0.45, 9, SAND[0]),
-      box(-16.5, 0.675, -14.3, 8.5, 0.45, 6.5, SAND[1]),
-      box(-17, 1.125, -14.6, 5, 0.45, 4, SAND[2]),
-      box(14, 0.225, -23, 10, 0.45, 7, SAND[0]),
-      box(14.5, 0.675, -23.3, 6, 0.45, 4.5, SAND[1]),
-      box(-22, 0.225, -3, 8, 0.45, 9, SAND[0]),
-      box(-22.5, 0.675, -3.3, 5, 0.45, 5.5, SAND[1]),
       // Ruined fort with a stair up: the high ground.
       box(20, 1.4, -10, 8, 2.8, 7, RUIN),
       stairs(20, -6.5, 1, 5, 2.8, 4.2, 6, 0xbf8a55),
@@ -419,10 +196,6 @@ const OASIS: LevelDef = {
       box(4, 0.6, -18, 5, 1.2, 1, RUIN),
       // Watchtower in the corner.
       box(-27, 3, -34, 3, 6, 3, RUIN),
-      poplar(-28.6, -24),
-      poplar(-28.6, -12),
-      poplar(28.6, -24),
-      poplar(28.6, -6),
     ]),
   ],
 };
@@ -430,18 +203,6 @@ const OASIS: LevelDef = {
 /* ── تۇرپان ئۈزۈمزارلىقى · Turpan Vineyard ────────────────────────── */
 
 const VINE = 0x3f8f3a;
-const LEAF = 0x5fae4a;
-const GRAPE = 0x9fd35a;
-
-function trellis(x: number): Prim[] {
-  return [
-    box(x, 0.8, -16, 0.7, 1.6, 12, VINE),
-    box(x, 2.2, -16, 2.4, 0.14, 12.4, LEAF, true),
-    box(x, 1.95, -20, 0.5, 0.4, 0.5, GRAPE, true),
-    box(x, 1.95, -16, 0.5, 0.4, 0.5, GRAPE, true),
-    box(x, 1.95, -12, 0.5, 0.4, 0.5, GRAPE, true),
-  ];
-}
 
 const peaks: Prim[] = (
   [
@@ -501,20 +262,9 @@ const VINEYARD: LevelDef = {
     ...[-20, -10, 10, 20].map((x) => box(x, 0.225, 0, 4, 0.45, 5.8, 0x9b6b43)),
     box(0, 0.225, 0, 9, 0.45, 7.4, 0x8a5530),
     box(0, 0.675, 0, 7, 0.45, 5.4, 0xa0643a),
-    box(0, 3.2, 0, 7.6, 0.16, 6, VINE, true),
-    box(-3.5, 1.9, -2.7, 0.2, 2.6, 0.2, 0x6b4226, true),
-    box(3.5, 1.9, -2.7, 0.2, 2.6, 0.2, 0x6b4226, true),
-    box(-3.5, 1.9, 2.7, 0.2, 2.6, 0.2, 0x6b4226, true),
-    box(3.5, 1.9, 2.7, 0.2, 2.6, 0.2, 0x6b4226, true),
-    box(-1.5, 2.9, 0, 0.5, 0.45, 0.5, GRAPE, true),
-    box(1.6, 2.9, 1, 0.5, 0.45, 0.5, GRAPE, true),
+    ...TURPAN_VINE_ROWS.map(({ x, z, length }) => box(x, 0.35, z, 0.8, 0.7, length, 0x926b45)),
     ...peaks,
     ...sym([
-      // Grape trellis rows make long lanes toward the canal.
-      ...trellis(-18),
-      ...trellis(-12),
-      ...trellis(12),
-      ...trellis(18),
       // Brick grape-drying house with a lattice face and a stair to the roof.
       box(22, 1.6, -28, 8, 3.2, 7, 0xb5703f),
       stairs(22, -24.5, 1, 5, 3.2, 5.6, 7, 0xa8653a),
@@ -533,7 +283,7 @@ const VINEYARD: LevelDef = {
 };
 
 export const LEVEL_DEFS: Record<LevelId, LevelDef> = {
-  harbor: HARBOR,
+  urumqi: URUMQI,
   bazaar: BAZAAR,
   oasis: OASIS,
   vineyard: VINEYARD,

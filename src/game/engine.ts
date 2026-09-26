@@ -1,4 +1,13 @@
+import { createCharacterLibrary, type CharacterAttachment } from "./characters/characterLibrary";
 import * as THREE from "three";
+import { disposeObject } from "./environment/sceneResources";
+import { createKashgarEnvironment } from "./environment/kashgarEnvironment";
+import { createTurpanEnvironment } from "./environment/turpanEnvironment";
+import { createUrumqiEnvironment } from "./environment/urumqiEnvironment";
+import { createOasisEnvironment, prepareOasisWater } from "./environment/oasisEnvironment";
+import { CollisionIndex, levelColliders, stairBoxes } from "./environment/collision";
+import { CityNavigation, type NavPoint } from "./environment/cityNavigation";
+import type { CollisionBox } from "./environment/environmentTypes";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { LEVEL_DEFS, MAP, waterRects, type LevelDef, type Rect } from "./levels";
 import { SPECIALS, characterById } from "./types";
@@ -34,7 +43,7 @@ const TUNE: Record<Difficulty, Tune> = {
   normal: { speed: 1, cd: 1, spread: 1, range: 1, think: 1, dmg: 1, meter: 0.7 },
   hard: { speed: 1.08, cd: 0.78, spread: 0.55, range: 1.2, think: 0.7, dmg: 1.15, meter: 0.9 },
 };
-type Box = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+type Box = CollisionBox;
 
 type Kid = {
   root: THREE.Group;
@@ -59,6 +68,7 @@ type Kid = {
   /** 0 = humanoid, 1 = squid; eased so the swap reads as a morph. */
   swim: number;
   blink: number;
+  avatar: CharacterAttachment;
 };
 
 type Actor = {
@@ -261,6 +271,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let locked = false;
 
   const solids: Box[] = [];
+  const collisionIndex = new CollisionIndex();
+  let cityNavigation: CityNavigation | null = null;
+  const botPaths = new WeakMap<Actor, { path: NavPoint[]; cursor: number; until: number; goal: NavPoint }>();
   const grid = new Uint8Array(GW * GH);
   const mask = new Uint8Array(GW * GH);
 
@@ -307,7 +320,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   scene.fog = new THREE.Fog(0xcfe9ff, 42, 110);
   const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 200);
 
-  scene.add(new THREE.HemisphereLight(0xffe4c2, 0xc97955, 1.38));
+  const skyLight = new THREE.HemisphereLight(0xffe4c2, 0xc97955, 1.38);
+  scene.add(skyLight);
   const sun = new THREE.DirectionalLight(0xffd3a0, 1.62);
   sun.position.set(26, 30, -12);
   scene.add(sun);
@@ -317,6 +331,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const inkMat = new THREE.ShaderMaterial({
     uniforms: {
       inkMap: { value: inkTex },
+      cityStyle: { value: 0 },
+      desertStyle: { value: 0 },
       uMin: { value: new THREE.Vector2(MAP.minX, MAP.minZ) },
       uSize: { value: new THREE.Vector2(MAP.w, MAP.d) },
       sunDir: { value: sunDir },
@@ -339,6 +355,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     `,
     fragmentShader: `
       uniform sampler2D inkMap;
+      uniform float cityStyle;
+      uniform float desertStyle;
       uniform vec2 uMin;
       uniform vec2 uSize;
       uniform vec3 sunDir;
@@ -352,6 +370,20 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         vec3 n = normalize(vNormalW);
         float wrap = clamp(dot(n, sunDir) * 0.5 + 0.58, 0.0, 1.0);
         vec3 base = vColor * (0.48 + 0.62 * wrap);
+        if (cityStyle > 0.5) {
+          vec2 stone = vWorld.xz * vec2(0.85, 1.1);
+          stone.x += mod(floor(stone.y), 2.0) * 0.5;
+          vec2 edge = min(fract(stone), 1.0 - fract(stone));
+          float mortar = smoothstep(0.018, 0.035, min(edge.x, edge.y));
+          float grain = fract(sin(dot(floor(stone), vec2(12.9898, 78.233))) * 43758.5453);
+          base *= mix(0.97, (0.88 + 0.14 * grain) * mix(0.78, 1.0, mortar), smoothstep(0.6, 0.95, n.y));
+        }
+        if (desertStyle > 0.5) {
+          float wind = vWorld.x * 4.3 + vWorld.z * 1.5 + sin(vWorld.z * 0.45) * 1.6;
+          float ripple = sin(wind + sin(vWorld.x * 0.36)) * 0.025;
+          float grain = fract(sin(dot(floor(vWorld.xz * 17.0), vec2(12.9898, 78.233))) * 43758.5453);
+          base *= 0.96 + ripple * smoothstep(0.6, 0.95, n.y) + grain * 0.04;
+        }
         vec2 uv = (vWorld.xz - uMin) / uSize;
         vec4 ink = texture2D(inkMap, clamp(uv, 0.0, 1.0));
         float upFace = smoothstep(0.4, 0.85, n.y);
@@ -359,6 +391,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         float fog = smoothstep(fogNear, fogFar, length(vWorld - cameraPosition));
         col = mix(col, fogColor, fog);
         gl_FragColor = vec4(col, 1.0);
+        vec4 legacyColor = gl_FragColor;
+        #include <colorspace_fragment>
+        gl_FragColor = mix(legacyColor, gl_FragColor, max(cityStyle, desertStyle));
       }
     `,
   });
@@ -460,9 +495,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const levelGroup = new THREE.Group();
   scene.add(levelGroup);
   const waterMeshes: THREE.Mesh[] = [];
+  const waterTime = { value: 0 };
   let levelTrash: { dispose(): void }[] = [];
-  let level: LevelDef = LEVEL_DEFS[bridge.config.current.level] ?? LEVEL_DEFS.harbor;
+  let level: LevelDef = LEVEL_DEFS[bridge.config.current.level] ?? LEVEL_DEFS.urumqi;
   let levelWater: Rect[] = waterRects(level);
+  let environment: ReturnType<typeof createKashgarEnvironment> | null = null;
 
   function hangBanner(x: number, z: number, rotY: number, i: number) {
     const g = new THREE.Group();
@@ -478,6 +515,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   /** Rebuilds solids, meshes, water, sky and the paintable mask for a level. */
   function buildLevel(def: LevelDef) {
+    environment?.dispose();
+    environment = null;
     for (const d of levelTrash) d.dispose();
     levelTrash = [];
     levelGroup.clear();
@@ -505,14 +544,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
           minZ: cz - d / 2,
           maxZ: cz + d / 2,
         });
-      }
-    }
-    function pushStairs(x: number, zEdge: number, dir: number, width: number, totalH: number, run: number, steps: number, color: number) {
-      const sd = run / steps;
-      for (let i = 0; i < steps; i++) {
-        const h = (totalH * (steps - i)) / steps;
-        const zc = zEdge + dir * (sd * i + sd / 2);
-        pushBox(x, h / 2, zc, width, h, Math.max(0.2, sd - 0.06), color, true);
       }
     }
     function pushPalm(x: number, z: number) {
@@ -547,8 +578,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       pushBox(31.2, 4.35, 0, 1.5, 0.3, 80.2, def.wallCap, false, true);
     }
     for (const p of def.prims) {
-      if (p.t === "box") pushBox(p.x, p.y, p.z, p.w, p.h, p.d, p.c, !p.deco, !!p.deco);
-      else if (p.t === "stairs") pushStairs(p.x, p.z, p.dir, p.w, p.h, p.run, p.steps, p.c);
+      if (p.t === "box" && !p.collisionOnly) pushBox(p.x, p.y, p.z, p.w, p.h, p.d, p.c, false, !!p.deco && !p.paintable);
+      else if (p.t === "stairs") for (const b of stairBoxes(p)) {
+        pushBox((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2, b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ, p.c, false);
+      }
       else if (p.t === "palm") pushPalm(p.x, p.z);
       else if (p.t === "poplar") pushPoplar(p.x, p.z);
       else if (p.t === "dome") add(new THREE.SphereGeometry(p.r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), p.c, at(p.x, p.y, p.z), true);
@@ -557,6 +590,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         add(new THREE.ConeGeometry(p.r * 0.55, p.h * 0.7, 5), 0x9c2f1c, at(p.x + p.r * 0.5, p.h * 0.35 - 1, p.z - p.r * 0.3), true);
       }
     }
+    solids.push(...levelColliders(def.prims));
+    collisionIndex.rebuild(solids);
+    cityNavigation = (def.id === "bazaar" || def.id === "urumqi")
+      ? new CityNavigation(solids, def.pools, def.id === "urumqi" ? { x: def.spawnO[0][0], y: 0, z: def.spawnO[0][1] } : undefined)
+      : null;
     pushBox(-4, 0.06, -33.2, 2.4, 0.1, 2.4, 0xff6a1a, false);
     pushBox(4, 0.06, 33.2, 2.4, 0.1, 2.4, 0x5b4dff, false);
 
@@ -573,6 +611,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
 
     const waterMat = new THREE.MeshLambertMaterial({ color: def.water, transparent: true, opacity: 0.78 });
+    if (def.id === "oasis") prepareOasisWater(waterMat, waterTime);
     levelTrash.push(waterMat);
     for (const r of levelWater) {
       const g = new THREE.PlaneGeometry(r.maxX - r.minX, r.maxZ - r.minZ);
@@ -597,6 +636,39 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     (scene.background as THREE.Color).set(def.sky);
     (scene.fog as THREE.Fog).color.set(def.fog);
     fogCol.set(def.fog);
+    inkMat.uniforms.cityStyle.value = (def.id === "bazaar" || def.id === "urumqi") ? 1 : 0;
+    inkMat.uniforms.desertStyle.value = def.id === "oasis" ? 1 : 0;
+    skyLight.color.set(def.id === "bazaar" ? 0xc5e4ff : 0xffe4c2);
+    skyLight.groundColor.set(def.id === "bazaar" ? 0x866146 : 0xc97955);
+    skyLight.intensity = def.id === "bazaar" ? 1.65 : 1.38;
+    sun.color.set(def.id === "bazaar" ? 0xffd3a1 : 0xffd3a0);
+    sun.intensity = def.id === "bazaar" ? 2.3 : 1.62;
+    sun.position.set(26, def.id === "bazaar" ? 24 : 30, -12);
+    if (def.id === "urumqi") {
+      skyLight.color.set(0xd3e6f3); skyLight.groundColor.set(0x927958); skyLight.intensity = 1.45;
+      sun.color.set(0xffe0bb); sun.intensity = 1.85; sun.position.set(-22, 32, -18);
+    }
+    if (def.id === "oasis") {
+      skyLight.color.set(0xd3e4e7);
+      skyLight.groundColor.set(0xa0784d);
+      skyLight.intensity = 1.3;
+      sun.color.set(0xffddb2);
+      sun.intensity = 1.9;
+      sun.position.set(-28, 22, -18);
+    }
+    if (def.id === "urumqi") {
+      environment = createUrumqiEnvironment();
+      levelGroup.add(environment.group);
+    } else if (def.id === "bazaar") {
+      environment = createKashgarEnvironment();
+      levelGroup.add(environment.group);
+    } else if (def.id === "vineyard") {
+      environment = createTurpanEnvironment();
+      levelGroup.add(environment.group);
+    } else if (def.id === "oasis") {
+      environment = createOasisEnvironment();
+      levelGroup.add(environment.group);
+    }
 
     for (let iz = 0; iz < GH; iz++) {
       for (let ix = 0; ix < GW; ix++) {
@@ -610,8 +682,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function standHeight(x: number, z: number, feetY: number) {
     let h = 0;
-    for (let i = 0; i < solids.length; i++) {
-      const b = solids[i];
+    for (const b of collisionIndex.at(x, z)) {
       if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
       if (b.maxY <= feetY + 0.5) h = Math.max(h, b.maxY);
     }
@@ -724,8 +795,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const geoEye = new THREE.SphereGeometry(0.095, 10, 8);
   const geoPupil = new THREE.SphereGeometry(0.052, 8, 6);
   const geoGlint = new THREE.SphereGeometry(0.02, 6, 6);
-  const geoTent = new THREE.ConeGeometry(0.09, 0.62, 6);
-  const geoSideTent = new THREE.ConeGeometry(0.068, 0.46, 6).rotateX(Math.PI);
   const geoLeg = new THREE.CapsuleGeometry(0.075, 0.32, 3, 6);
   const geoShoe = new THREE.SphereGeometry(0.11, 8, 6);
   const geoShort = new THREE.SphereGeometry(0.23, 10, 8);
@@ -801,7 +870,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   // ── Characters ────────────────────────────────────────────────
-  // Everyone shares the team-coloured body; headwear and props set each character apart.
+  // Human Uyghur fallbacks stay visible while the supplied avatars are decoded.
+  const characterLibrary = createCharacterLibrary();
   const SKIN: Record<CharacterId, number> = {
     wave: 0xffc7a8,
     doppa: 0xf1b791,
@@ -904,18 +974,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   };
 
   function headwear(char: CharacterId, team: Team): { parts: THREE.Object3D[]; tentL: THREE.Object3D; tentR: THREE.Object3D } {
-    if (char === "wave") {
-      const tentL = new THREE.Mesh(geoTent, inkGloss[team]);
-      const tentR = new THREE.Mesh(geoTent, inkGloss[team]);
-      tentL.position.set(-0.16, 1.86, -0.02);
-      tentR.position.set(0.16, 1.86, -0.02);
-      tentL.rotation.z = 0.35;
-      tentR.rotation.z = -0.35;
-      const mid = new THREE.Mesh(geoTent, inkGloss[team]);
-      mid.position.set(0, 1.92, -0.08);
-      mid.scale.set(1.1, 1.15, 1);
-      return { parts: [tentL, tentR, mid], tentL, tentR };
-    }
     if (char === "braids") {
       const cap = new THREE.Mesh(geoDoppaSmall, doppaGirl);
       cap.position.y = HEAD_Y + 0.31;
@@ -982,16 +1040,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     return { parts, tentL, tentR };
   }
 
-  /** Two glossy ink tentacles hanging by the ears: every character is part squid. */
-  function sideTentacles(team: Team) {
-    const tent = () => {
-      const t = new THREE.Mesh(geoSideTent, inkGloss[team]);
-      t.position.y = -0.2;
-      return t;
-    };
-    const tentL = swayPivot(-0.25, 1.47, -0.06, 1, [tent()]);
-    const tentR = swayPivot(0.25, 1.47, -0.06, -1, [tent()]);
-    return { tentL, tentR };
+  /** Empty animation pivots preserve the rig contract without ink spikes or ear tentacles. */
+  function sideTentacles(_team: Team) {
+    return { tentL: swayPivot(-0.25, 1.47, -0.06, 1, []), tentR: swayPivot(0.25, 1.47, -0.06, -1, []) };
   }
 
   function makeKid(team: Team, name: string, char: CharacterId = "wave"): Kid {
@@ -1072,7 +1123,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       weapons[k].visible = k === "spritzer";
       mount.add(weapons[k]);
     });
-    body.add(torso, headPivot, shortM, legs, armGun, armSup, mount);
+    const fallback = new THREE.Group();
+    fallback.name = "Uyghur character fallback";
+    fallback.add(torso, headPivot, shortM, legs, armGun, armSup);
+    body.add(fallback, mount);
 
     // Squid form: a glossy teardrop with a pointed mantle, two eyes and trailing fins.
     const squid = new THREE.Group();
@@ -1135,6 +1189,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       fins,
       swim: 0,
       blink: 1 + rand() * 3,
+      avatar: characterLibrary.attach(char, team, { body, headPivot, legs, armGun, armSup, mount }, fallback),
     };
     writeName(kid, name, team);
     scene.add(root);
@@ -1144,6 +1199,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   /** Frees what a kid owns outright: its weapon meshes and name tag. Shared parts stay. */
   function disposeKid(kid: Kid) {
+    kid.avatar.dispose();
     scene.remove(kid.root);
     kid.mount.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
@@ -1586,25 +1642,25 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     let ny = 1;
     let nz = 0;
     let hit = false;
+    const o = [ox, oy, oz];
+    const d = [dx, dy, dz];
     for (let i = 0; i < solids.length; i++) {
       const b = solids[i];
       let tmin = 0;
       let tmax = bestT;
       let face = 0;
-      const o = [ox, oy, oz];
-      const d = [dx, dy, dz];
-      const mn = [b.minX, b.minY, b.minZ];
-      const mx = [b.maxX, b.maxY, b.maxZ];
       let ok = true;
       for (let a = 0; a < 3; a++) {
+        const min = a === 0 ? b.minX : a === 1 ? b.minY : b.minZ;
+        const max = a === 0 ? b.maxX : a === 1 ? b.maxY : b.maxZ;
         if (Math.abs(d[a]) < 1e-8) {
-          if (o[a] < mn[a] || o[a] > mx[a]) {
+          if (o[a] < min || o[a] > max) {
             ok = false;
             break;
           }
         } else {
-          let t1 = (mn[a] - o[a]) / d[a];
-          let t2 = (mx[a] - o[a]) / d[a];
+          let t1 = (min - o[a]) / d[a];
+          let t2 = (max - o[a]) / d[a];
           let entering = -1;
           if (t1 > t2) {
             const s = t1;
@@ -1635,19 +1691,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       else if (axis === 1) ny = sign;
       else nz = sign;
     }
-    const step = 0.45;
-    for (let t = 0.2; t < bestT; t += step) {
-      const x = ox + dx * t;
-      const y = oy + dy * t;
-      const z = oz + dz * t;
-      const gh = surfaceTop(x, z);
-      if (y <= gh + 0.02 && oy > surfaceTop(ox, oz) - 0.2) {
-        bestT = t;
-        hit = true;
-        nx = 0;
-        ny = 1;
-        nz = 0;
-        break;
+    // Exact ground-plane intersection; raised surfaces are handled by the boxes above.
+    if (dy < -1e-8 && oy >= 0) {
+      const groundT = -oy / dy;
+      if (groundT >= 0.04 && groundT < bestT) {
+        bestT = groundT; hit = true; nx = 0; ny = 1; nz = 0;
       }
     }
     if (!hit) return null;
@@ -1657,8 +1705,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function resolveActor(a: Actor) {
     const r = 0.36;
     const head = a.y + 1.45;
-    for (let i = 0; i < solids.length; i++) {
-      const b = solids[i];
+    for (const b of collisionIndex.at(a.x, a.z)) {
       if (head < b.minY + 0.02) continue;
       if (a.y > b.maxY - 0.02) continue;
       if (b.maxY <= a.y + 0.55) continue;
@@ -1685,8 +1732,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function blockerTop(x: number, z: number, y: number) {
     const r = 0.36;
     let top = -1;
-    for (let i = 0; i < solids.length; i++) {
-      const b = solids[i];
+    for (const b of collisionIndex.at(x, z)) {
       if (y + 1.2 < b.minY || y > b.maxY - 0.3) continue;
       if (b.maxY <= y + 0.55) continue;
       if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) top = Math.max(top, b.maxY);
@@ -1696,8 +1742,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function blocked(x: number, z: number, y: number) {
     const r = 0.36;
-    for (let i = 0; i < solids.length; i++) {
-      const b = solids[i];
+    for (const b of collisionIndex.at(x, z)) {
       if (y + 1.2 < b.minY || y > b.maxY - 0.3) continue;
       if (b.maxY <= y + 0.55) continue;
       if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return true;
@@ -2245,8 +2290,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (a.vy < 0) a.vy = 0;
       a.grounded = true;
     } else a.grounded = false;
-    for (let i = 0; i < solids.length; i++) {
-      const b = solids[i];
+    for (const b of collisionIndex.at(a.x, a.z)) {
       if (a.x < b.minX || a.x > b.maxX || a.z < b.minZ || a.z > b.maxZ) continue;
       const head = ny + 1.45;
       if (a.vy > 0 && head > b.minY && prevY + 1.45 <= b.minY + 0.05) {
@@ -2383,6 +2427,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         bestZ = z;
       }
     }
+    if (cityNavigation) {
+      const point = cityNavigation.nodes[cityNavigation.nearest({ x: bestX, y: surfaceTop(bestX, bestZ), z: bestZ })];
+      if (point) { bestX = point.x; bestZ = point.z; }
+    }
     a.goalX = bestX;
     a.goalZ = bestZ;
   }
@@ -2421,6 +2469,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
    * Pools: head for the cheapest visible corner of the pool's padded outline.
    */
   function navTarget(a: Actor, gx: number, gz: number): [number, number] {
+    if (cityNavigation) {
+      const enemy = a.mode === "fight" ? actors.find((other) => other.alive && other.team !== a.team && Math.abs(other.x - gx) < 0.1 && Math.abs(other.z - gz) < 0.1) : undefined;
+      const goal = { x: gx, y: enemy?.y ?? surfaceTop(gx, gz), z: gz };
+      const now = performance.now();
+      let route = botPaths.get(a);
+      if (!route || now > route.until || Math.hypot(goal.x - route.goal.x, goal.z - route.goal.z) > 4 || Math.abs(goal.y - route.goal.y) > 1) {
+        route = { path: cityNavigation.path(a, goal), cursor: 0, until: now + 1100 + a.phase % 1 * 300, goal };
+        botPaths.set(a, route);
+      }
+      while (route.cursor < route.path.length - 1 && Math.hypot(route.path[route.cursor].x - a.x, route.path[route.cursor].z - a.z) < 0.6 && Math.abs(route.path[route.cursor].y - a.y) < 0.6) route.cursor++;
+      const waypoint = route.path[route.cursor];
+      return waypoint ? [waypoint.x, waypoint.z] : [a.x, a.z];
+    }
     const ch = level.channel;
     if (ch) {
       const half = ch.rect.maxZ;
@@ -2538,7 +2599,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     }
     // Strafe while fighting, except near the channel where a sidestep means a swim.
-    if (a.mode === "fight" && !nearWater(a.x, a.z, 2.5)) {
+    if (!cityNavigation && a.mode === "fight" && !nearWater(a.x, a.z, 2.5)) {
       dx += Math.cos(a.phase * 3) * 0.8;
       dz += Math.sin(a.phase * 3) * 0.8;
       const m = Math.hypot(dx, dz) || 1;
@@ -2606,6 +2667,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   }
 
   function respawn(a: Actor) {
+    botPaths.delete(a);
     const spots = a.team === 1 ? level.spawnO : level.spawnV;
     const sameTeam = actors.filter((other) => other !== a && other.team === a.team && other.alive);
     let s = spots[Math.floor(rand() * spots.length)];
@@ -2762,6 +2824,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     writeName(p.mesh, p.name, 1);
     setWeapon(p.mesh, p.weapon);
     actors.forEach((a, idx) => {
+      botPaths.delete(a);
       a.splats = 0;
       a.deaths = 0;
       a.lives = bridge.config.current.gameMode === "survival" ? 3 : 99;
@@ -2901,6 +2964,12 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       const y0 = (1 - (r.maxZ - MAP.minZ) / MAP.d) * h;
       g.fillRect(x0, y0, ((r.maxX - r.minX) / MAP.w) * w, ((r.maxZ - r.minZ) / MAP.d) * h);
     }
+    if (level.id === "bazaar" || level.id === "urumqi") {
+      g.strokeStyle = "rgba(41,49,52,0.55)";
+      g.lineWidth = 1;
+      for (const b of solids) if (b.maxY > 1.5 && b.maxX - b.minX > 2 && b.maxZ - b.minZ > 2)
+        g.strokeRect((b.minX - MAP.minX) / MAP.w * w, (1 - (b.maxZ - MAP.minZ) / MAP.d) * h, (b.maxX - b.minX) / MAP.w * w, (b.maxZ - b.minZ) / MAP.d * h);
+    }
     const dot = (x: number, z: number, color: string, rad: number) => {
       const u = (x - MAP.minX) / MAP.w;
       const v = (z - MAP.minZ) / MAP.d;
@@ -2935,6 +3004,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function syncVisuals(dt: number) {
     const t = performance.now() * 0.001;
+    waterTime.value = t;
     for (const m of waterMeshes) m.position.y = 0.07 + Math.sin(t * 1.6) * 0.02;
     clouds.forEach((c, i) => {
       c.position.x += dt * (0.35 + i * 0.05);
@@ -3415,6 +3485,16 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     specialLatch = special;
   }
 
+  const perfEnabled = new URLSearchParams(window.location.search).get("perf") === "1";
+  const perfPanel = perfEnabled ? document.createElement("output") : null;
+  if (perfPanel) {
+    perfPanel.className = "environment-perf";
+    perfPanel.dir = "ltr";
+    perfPanel.setAttribute("aria-label", "Renderer performance");
+    document.body.appendChild(perfPanel);
+  }
+  let perfFrames = 0;
+  let perfSince = performance.now();
   let last = performance.now();
   let acc = 0;
   let lastQuality = "";
@@ -3466,7 +3546,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       hudAcc = 0;
       publish(false);
     }
+    if (mode === "play") actors.forEach(actor => { if (actor.alive) actor.mesh.avatar.update(); });
+    if (hero.root.visible) hero.avatar.update();
     renderer.render(scene, camera);
+    if (perfPanel && ++perfFrames && now - perfSince >= 500) {
+      const info = renderer.info;
+      perfPanel.textContent = `FPS ${(perfFrames * 1000 / (now - perfSince)).toFixed(0)} · Draw calls ${info.render.calls}\nTriangles ${info.render.triangles.toLocaleString()}\nGeometries ${info.memory.geometries} · Textures ${info.memory.textures}\n${level.id}`;
+      perfFrames = 0; perfSince = now;
+    }
     raf = requestAnimationFrame(frame);
   }
 
@@ -3606,6 +3693,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     canvas.removeEventListener("contextmenu", onContext);
     window.removeEventListener("resize", resize);
     if (window.__controlsTest) delete window.__controlsTest;
+    environment?.dispose();
+    environment = null;
+    for (const resource of levelTrash) resource.dispose();
+    characterLibrary.dispose();
+    disposeObject(scene);
+    perfPanel?.remove();
+    if (window.__inkwave) delete window.__inkwave;
     inkTex.dispose();
     renderer.dispose();
     audio.close();

@@ -64,25 +64,33 @@ Pick a stage from **مەيدان تاللاش** in the menu; the menu backdrop s
 
 | Stage | Layout |
 |---|---|
-| پورت · Harbor | The original map. A water channel splits the middle; cross on the two docks or the central platform. |
-| قەشقەر بازىرى · Kashgar Bazaar | Tight market lanes of awning stalls, gate arches, domed towers, caravanserai rooftops, and a tiled fountain in the centre. |
-| تەكلىماكان ۋاھەسى · Taklamakan Oasis | Open sand with walk-up dune terraces, mud-brick ruins, a hilltop fort, and a palm-ringed pond. |
-| تۇرپان ئۈزۈمزارلىقى · Turpan Vineyard | Grape-trellis lanes, a karez canal with five crossings, grape-drying houses, and the Flaming Mountains on the horizon. |
+| ئۈرۈمچى · Urumqi | A bazaar square using the five supplied Urumqi models, with a central tower, market cover and raised side promenades. |
+| قەشقەر بازىرى · Kashgar Bazaar | Procedural adobe courtyard houses, market streets, tea terraces, connected roofs and bridges, high lookouts, grape pergolas, and a fountain square inside a layered old-city skyline. |
+| تەكلىماكان ۋاھەسى · Taklamakan Oasis | Sculpted dune horizons, eroded sandstone ridges, climbable sand terraces, detailed ruined forts, caravan shelters, and a date-palm oasis with rippling water. |
+| تۇرپان ئۈزۈمزارلىقى · Turpan Vineyard | Leafy grape-trellis lanes and harvest baskets, a vine-covered karez pavilion with five crossings, grape-drying houses, the historic minaret, and the Flaming Mountains. |
 
 Levels are plain data in `src/game/levels.ts` (boxes, stairs, trees, domes, water rects, spawns, colours). The engine builds them at runtime and the stage screen draws its map previews from the same data. Maps are point-symmetric via `sym()`, so both teams get the same layout. Bots cross channels at the listed `crossings` and walk around `pools`.
 
+Urumqi replaces the original Port stage and migrates existing Port selections. Its five optimized models total about 4.06 MB; unused originals have been removed from the project. Streets and raised promenades remain paintable. See [Urumqi environment authoring](docs/URUMQI_ENVIRONMENT.md) for the layout, asset recipe and checks.
+
+Kashgar's layout lives in `src/game/environment/kashgarLayout.ts`. Kashgar's architecture uses shared Three.js primitives and the game's lightweight materials, with no model downloads for this stage. Simple boxes and a layered navigation graph connect four gameplay heights. Add `?perf=1` to inspect FPS and renderer counters. See [Kashgar environment authoring](docs/KASHGAR_ENVIRONMENT.md) for geometry, collision, budgets and tests.
+
+Turpan uses one optimized historic-minaret model (about 950 KB) as a landmark outside the west boundary, plus procedural vineyards and grape pergolas. Its model loads only on this stage and does not delay match start. See [Turpan environment authoring](docs/TURPAN_ENVIRONMENT.md) for the asset recipe, layout and checks.
+
+Taklimakan uses lightweight procedural 3D modeling for curved dunes, layered sandstone and date palms, with warm lighting and animated water highlights. The existing fort stairs, sand terraces and paths around the pond remain playable. See [Taklimakan environment authoring](docs/OASIS_ENVIRONMENT.md).
+
 ## Characters
 
-Choose in **قورال-جابدۇق** (loadout); the model spins in the middle of the screen. Each has one small perk, and the bots use them too.
+Choose in **قورال-جابدۇق** (loadout); the model spins in the middle of the screen. The default uses the optimized `cute.glb`, prepared from the supplied `cute-character.glb`: a boy with a black doppa and embroidered white shirt. The unused 61 MB original has been removed; the game needs only the 677 KB runtime copy. Five optimized supplied models provide all six character choices and bot appearances, with separate hats/instruments for variants. Each keeps its existing perk. See [character assets and animation](docs/CHARACTERS.md).
 
 | Character | Look | Perk |
 |---|---|---|
-| دولقۇنچاق | Ink-tentacle hair | Balanced |
-| دوپپىلىق يىگىت | Black doppa with white badam motifs | Run speed +8% |
-| ئۆرۈمە چاچلىق قىز | Crimson doppa and long braids | Swim speed +12% |
+| دوپپىلىق بالا | New supplied boy with a black doppa, embroidered shirt and boots | Balanced |
+| دوپپىلىق يىگىت | Supplied boy in an embroidered shirt, boots and doppa | Run speed +8% |
+| ئۆرۈمە چاچلىق قىز | Supplied girl with long braids and a patterned dress | Swim speed +12% |
 | تەلپەكلىك باتۇر | Sheepskin telpek | Takes 10% less damage |
-| ئەتلەس ياغلىقلىق قىز | Etles-silk headscarf | Special charges 15% faster |
-| دۇتارچى | Doppa and a dutar on the back | Ink refills 15% faster |
+| ئەتلەس كىيىملىك قىز | Supplied traditional Etles outfit | Special charges 15% faster |
+| دۇتارچى | Previous blue-doppa boy with short hair and a dutar on the back | Ink refills 15% faster |
 
 ## v1.1 gameplay
 
@@ -91,7 +99,7 @@ Choose in **قورال-جابدۇق** (loadout); the model spins in the middle o
 - **Feedback**: hit marker and splat burst on the crosshair, hit sound, low-ink prompt, special-ready tag, a "1 minute left" callout, and a final 10-second countdown with ticks.
 - **Scoreboard**: hold Tab (or tap نەتىجە on touch) mid-match; the results screen shows both teams with turf points, splats, washouts and an MVP crown.
 - **Progression**: every match earns XP (turf points + 50 per splat + 300 for a win). The player card shows level, XP bar and personal best.
-- **Etles (ئەتلەس) banners**: procedural ikat-silk banners hang on the harbor walls, and an ikat strip accents the menu and results.
+- **Etles (ئەتلەس) banners**: procedural ikat-silk banners hang on the arena walls, and an ikat strip accents the menu and results.
 - **Music**: a Hijaz-flavoured maqam line over a dap frame-drum pattern that speeds up in the final minute, plus win/lose jingles.
 
 ## Uyghur edition
@@ -101,6 +109,10 @@ All in-game content is in Uyghur (سىياھ دولقۇنى — زېمىن جې�
 - **Font**: ALKATIP Basma, loaded via `@font-face` in `src/styles.css` and applied through the `.alkatip-basma` class on the app root. The engine calls `document.fonts.load()` before redrawing name tags, since canvas text never triggers a web-font download on its own.
 - **Direction**: the document is `lang="ug" dir="rtl"`. Layout uses logical utilities (`ms-*`, `ps-*`, `text-start/end`) so the HUD score bar and cards mirror correctly.
 - **Ink buttons**: `InkButton` / `InkOption` in `src/components/InkWaveApp.tsx`, styled by the `.ink-*` classes in `src/styles.css`. Blob-shaped faces with a sloshing ink wave, bulb drips off the ledge, hover splatter, and a splat check badge on selected cards. Motion is disabled under `prefers-reduced-motion`.
+
+## GLB integration skill
+
+Use [add-glb-to-game](skills/add-glb-to-game/SKILL.md) for the reusable workflow to inspect, optimize, integrate, animate, verify, and clean up supplied 3D models. Its [Three.js notes](skills/add-glb-to-game/references/threejs.md) explain this project's integration points.
 
 ## Source
 

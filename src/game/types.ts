@@ -5,7 +5,7 @@ export type Quality = "low" | "high";
 export type Difficulty = "easy" | "normal" | "hard";
 export type GameMode = "turf" | "zone" | "survival";
 export type BotRole = "attacker" | "painter" | "defender" | "hunter";
-export type LevelId = "harbor" | "bazaar" | "oasis" | "vineyard";
+export type LevelId = "urumqi" | "bazaar" | "oasis" | "vineyard";
 export type CharacterId = "wave" | "doppa" | "braids" | "telpek" | "scarf" | "dutar";
 
 export type InputState = {
@@ -162,7 +162,7 @@ export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
 ];
 
 export const LEVELS: { id: LevelId; name: string; blurb: string }[] = [
-  { id: "harbor", name: "پورت", blurb: "ئوتتۇرىدىن سۇ ئۆتىدۇ — ئىككى پىرىستان ياكى مەركىزى سۇپا ئارقىلىق ئۆتۈڭ." },
+  { id: "urumqi", name: "ئۈرۈمچى", blurb: "چوڭ بازار بىناسى، ئېگىز مۇنار ۋە كەڭ مەيدان — يان سۇپىلاردىن پايدىلىنىڭ." },
   { id: "bazaar", name: "قەشقەر بازىرى", blurb: "دۇكانلار، دەرۋازىلار ۋە ئوتتۇرىدىكى فونتان — يېقىن ئارىلىقتىكى قىزغىن جەڭ." },
   { id: "oasis", name: "تەكلىماكان ۋاھەسى", blurb: "قۇم دۆڭلىرى، قەدىمىي خارابىلەر ۋە ئوتتۇرىدىكى كۆل." },
   { id: "vineyard", name: "تۇرپان ئۈزۈمزارلىقى", blurb: "ئۈزۈم باراڭلىرى، كارىز ئېرىقى ۋە ئوتلۇق تاغ مەنزىرىسى." },
@@ -180,7 +180,7 @@ export type CharacterInfo = { id: CharacterId; name: string; trait: string; blur
 const BASE_MODS: CharacterMods = { run: 1, swim: 1, armor: 1, meter: 1, ink: 1 };
 
 export const CHARACTERS: CharacterInfo[] = [
-  { id: "wave", name: "دولقۇنچاق", trait: "تەڭپۇڭ", blurb: "سىياھ چېچى بىلەن ھەممە ئىشقا تەييار.", mods: BASE_MODS },
+  { id: "wave", name: "دوپپىلىق بالا", trait: "تەڭپۇڭ", blurb: "قارا دوپپا ۋە نەقىشلىك كۆڭلەك كىيگەن چاققان بالا.", mods: BASE_MODS },
   {
     id: "doppa",
     name: "دوپپىلىق يىگىت",
@@ -204,9 +204,9 @@ export const CHARACTERS: CharacterInfo[] = [
   },
   {
     id: "scarf",
-    name: "ئەتلەس ياغلىقلىق قىز",
+    name: "ئەتلەس كىيىملىك قىز",
     trait: "ئالاھىدە ماھارەت ‎+15%",
-    blurb: "ئەتلەس ياغلىقى ئالاھىدە كۈچنى تېز يىغىدۇ.",
+    blurb: "رەڭدار ئەتلەس كىيىملىك قىز ئالاھىدە كۈچنى تېز يىغىدۇ.",
     mods: { ...BASE_MODS, meter: 1.15 },
   },
   {

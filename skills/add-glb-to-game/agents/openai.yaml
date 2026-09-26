@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add GLB to a Game"
+  short_description: "Integrate and optimize supplied GLB game models"
+  default_prompt: "Use $add-glb-to-game to integrate my supplied GLB model into this game, optimize it, and verify its appearance and loading."

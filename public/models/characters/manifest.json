@@ -1,0 +1,131 @@
+[
+  {
+    "id": "boy",
+    "source": "3d cartoon boy model.glb",
+    "sourceSha256": "8c0b0a695ab7b50c91e842cd2175e4527650110b0d8e30eaccd2b350b3a18965",
+    "sourceBytes": 27477616,
+    "sourceTriangles": 870778,
+    "runtimeBytes": 575652,
+    "runtimeTriangles": 13999,
+    "vertices": 9545,
+    "simplificationError": 0.0018591664265841246,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.26092529296875,
+        0.000091552734375,
+        -0.2062530517578125
+      ],
+      "max": [
+        0.26025390625,
+        0.99957275390625,
+        0.2057037353515625
+      ]
+    },
+    "removeFloatingParts": false,
+    "hairStyle": "short",
+    "trimmedTriangles": 412
+  },
+  {
+    "id": "athlete",
+    "source": "animated+boy+character+3d+model.glb",
+    "sourceSha256": "b500ccf41017b330c5729b17ae37d385f7f339f7a276845c96dabd667f5eba2a",
+    "sourceBytes": 60560180,
+    "sourceTriangles": 1934737,
+    "runtimeBytes": 594052,
+    "runtimeTriangles": 14000,
+    "vertices": 9480,
+    "simplificationError": 0.003237496130168438,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.3860169053077698,
+        0.000579833984375,
+        -0.1001129299402237
+      ],
+      "max": [
+        0.3853760361671448,
+        0.979461669921875,
+        0.09976960718631744
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "id": "girl",
+    "source": "girl character 3d model.glb",
+    "sourceSha256": "af33db98a8dba244ca1c9f7265634dff4882b1b7047ceb6d6e0d20bccdc99c60",
+    "sourceBytes": 27996760,
+    "sourceTriangles": 863410,
+    "runtimeBytes": 617688,
+    "runtimeTriangles": 14000,
+    "vertices": 9170,
+    "simplificationError": 0.0015038703568279743,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.1981658935546875,
+        0.00006103515625,
+        -0.1571807861328125
+      ],
+      "max": [
+        0.1977081298828125,
+        0.99993896484375,
+        0.1566314697265625
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "id": "dress",
+    "source": "traditional dress character 3d model (1).glb",
+    "sourceSha256": "db0be7fe6b80d48f2f0412ddf7ab7a680c3b04f7dee242f0af2f95be9f2669fa",
+    "sourceBytes": 28084276,
+    "sourceTriangles": 869014,
+    "runtimeBytes": 645232,
+    "runtimeTriangles": 14000,
+    "vertices": 9203,
+    "simplificationError": 0.002127673476934433,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.22857666015625,
+        0.00018310546875,
+        -0.182525634765625
+      ],
+      "max": [
+        0.22906494140625,
+        0.99908447265625,
+        0.1826171875
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "id": "cute",
+    "source": "cute-character.glb",
+    "sourceSha256": "7ea6792cca1c3cf2c9432e627828a601b5eabe2e9e399e8e2e46e88399420c82",
+    "sourceBytes": 61048116,
+    "sourceTriangles": 1883938,
+    "runtimeBytes": 676516,
+    "runtimeTriangles": 19999,
+    "vertices": 12470,
+    "simplificationError": 0.0019110830035060644,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.2854461669921875,
+        0.0001220703125,
+        -0.277984619140625
+      ],
+      "max": [
+        0.2851104736328125,
+        0.98046875,
+        0.27838134765625
+      ]
+    },
+    "removeFloatingParts": false,
+    "preserveTextureSeams": true,
+    "smoothNormals": true
+  }
+]

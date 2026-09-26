@@ -276,7 +276,7 @@ export function InkWaveApp() {
 
   return (
     <div className="alkatip-basma fixed inset-0 touch-none overflow-hidden bg-navy text-foam select-none">
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="سىياھ دولقۇنى پورتى" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="سىياھ دولقۇنى ئويۇن مەيدانى" />
       <canvas
         ref={miniRef}
         width={180}
@@ -628,7 +628,7 @@ function MapPreview({ id, className = "" }: { id: LevelId; className?: string })
       if (p.t === "box" && !p.deco) blocks.push({ r: rect(p.x - p.w / 2, p.x + p.w / 2, p.z - p.d / 2, p.z + p.d / 2), top: p.y + p.h / 2, c: p.c });
       else if (p.t === "stairs") {
         const end = p.z + p.dir * p.run;
-        blocks.push({ r: rect(p.x - p.w / 2, p.x + p.w / 2, Math.min(p.z, end), Math.max(p.z, end)), top: p.h / 2, c: p.c });
+        blocks.push({ r: rect(p.x - p.w / 2, p.x + p.w / 2, Math.min(p.z, end), Math.max(p.z, end)), top: (p.base ?? 0) + p.h / 2, c: p.c });
       }
     }
     blocks.sort((a, b) => a.top - b.top);
