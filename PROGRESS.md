@@ -6,6 +6,7 @@ All four environments are complete. The default player uses the optimized `cute.
 The reusable `add-glb-to-game` skill is documented in `skills/` and installed in the user's Codex skills directory.
 
 ## Completed
+- Optimized the external Downloads model library: 47 GLBs reduced from 2.14 GB to 88.15 MB using the confirmed Balanced profile; saved copies and reports in `~/Downloads/3D Model/Game Ready`, preserving all originals.
 - Created the reusable `add-glb-to-game` skill, with Three.js integration notes covering model selection, optimization, rigs, loading, packaging, validation, and authorized source cleanup. Linked its project copy from the README.
 - Removed the unused `cute-character.glb` original, freeing 61,048,116 bytes while retaining all eleven active GLBs and manifest provenance. Character regeneration now requires an external source path.
 - Integrated the new confirmed `cute-character.glb` as default `wave`, retaining saves/perks and optimizing its 61 MB source to 677 KB. Preserved UV seams and smoothed normals; the later cleanup removed the original.
@@ -439,3 +440,30 @@ Write a reusable `SKILL.md` explaining how to put supplied GLB models into games
 
 **Next**
 - Use the skill for the next supplied GLB integration; continue physical-device playtests for the existing game.
+
+
+### 2026-09-26 — Optimize the Downloads GLB library
+
+**Goal**
+Create lightweight copies of every GLB in `~/Downloads/3D Model` for games and other 3D uses. The user confirmed the Balanced profile and keeping every original.
+
+**Completed**
+- Inspected all 47 source GLBs: 2,144,831,336 bytes and 62,306,531 triangles, with embedded textures and no skins or animation clips.
+- Prepared 47 self-contained GLB copies totaling 88,154,160 bytes (95.89% smaller) and 1,690,019 triangles. Individual files range from about 0.65 to 2.98 MB.
+- Preserved node transforms, scene hierarchy, mesh parts, material definitions, and color/normal/metallic-roughness texture assignments. The multipart minaret retains all 41 meshes. Reduced textures to at most 1024 pixels and used per-model simplification settings after comparison.
+- Verified all source hashes unchanged; checked GLB structure, indices, finite geometry, image decoding, materials, scene data, output sizes, and bounds changes. All 47 original/optimized pairs loaded without errors and were reviewed from front, side, and back in a temporary Three.js browser viewer.
+- Saved the verified copies beside the originals in `~/Downloads/3D Model/Game Ready`, with `README.md`, `size-comparison.csv`, and `optimization-report.json`. Verified the copied files match the reviewed outputs.
+- Removed the temporary review page and source copies from the game repository. No runtime game models or application code changed.
+
+**Files Changed**
+- External: `~/Downloads/3D Model/Game Ready/` — 47 optimized GLBs and three report/instruction files.
+- Repository: `PROGRESS.md` only.
+
+**Important Notes**
+- Originals remain in the parent Downloads folder. Workspace storage was not reduced by deleting sources; the new copies are suitable for smaller transfers and runtime use.
+- The copies use standard embedded JPEG/PNG textures without a required geometry/texture compression decoder. They remain static models; this task did not add rigs or animation.
+- Triangle reduction and texture resizing trade some close-up detail for smaller assets. The report records settings, source/output hashes, counts, and per-part bounds changes. Keep the originals for close-up authoring or future reprocessing.
+- Blender's headless preview crashed locally; completed visual review with Three.js in the browser instead. Game tests/build were not rerun because game code and assets were unchanged.
+
+**Next**
+- Use files from `Game Ready` for future integrations; fit their collision, scale, and animation to the destination game as needed.
