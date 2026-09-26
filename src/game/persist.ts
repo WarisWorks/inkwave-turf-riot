@@ -1,4 +1,4 @@
-import type { CharacterId, Difficulty, LevelId, MatchResult, Quality, SpecialId, SubId, WeaponId } from "./types";
+import type { CharacterId, Difficulty, GameMode, LevelId, MatchResult, Quality, SpecialId, SubId, WeaponId } from "./types";
 
 export type SaveData = {
   version: 1;
@@ -16,6 +16,8 @@ export type SaveData = {
   difficulty: Difficulty;
   level: LevelId;
   character: CharacterId;
+  gameMode: GameMode;
+  coins: number;
   /** Lifetime experience; drives the player level. */
   xp: number;
   /** Best single-match turf points. */
@@ -40,6 +42,8 @@ export const DEFAULT_SAVE: SaveData = {
   difficulty: "normal",
   level: "harbor",
   character: "wave",
+  gameMode: "turf",
+  coins: 0,
   xp: 0,
   best: 0,
 };
@@ -66,6 +70,10 @@ export function levelInfo(xp: number) {
 
 export function matchXp(r: MatchResult) {
   return r.points + r.splats * 50 + (r.winner === "orange" ? 300 : 0);
+}
+
+export function matchCoins(r: MatchResult) {
+  return 40 + Math.floor(r.points / 25) + r.splats * 8 + (r.winner === "orange" ? 60 : 0);
 }
 
 export function loadSave(): SaveData {

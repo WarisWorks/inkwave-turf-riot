@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { LEVEL_DEFS, MAP, waterRects, type LevelDef, type Rect } from "./levels";
 import { characterById } from "./types";
-import type { BoardRow, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
+import type { BoardRow, BotRole, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
 
 const GW = 120;
 const GH = 152;
@@ -93,6 +93,8 @@ type Actor = {
   stuck: number;
   char: CharacterId;
   mods: CharacterMods;
+  role: BotRole;
+  lives: number;
   mesh: Kid;
 };
 
@@ -207,6 +209,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let hudAcc = 0;
   let miniAcc = 0;
   let scoreAcc = 0;
+  let eventClock = 0;
+  let worldEvent: "none" | "sandstorm" | "festival" = "none";
+  let worldEventT = 0;
   let dead = false;
   let raf = 0;
   let lookDX = 0;
@@ -1013,19 +1018,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   // 6v6 roster: the human player + five Orange teammates versus six Violet opponents.
   // Keep the loadout mix varied so larger matches feel busy without turning into a wall of one weapon type.
-  const BOTS: { name: string; team: Team; weapon: WeaponId; char: CharacterId }[] = [
-    { name: "ئايگۈل", team: 1, weapon: "spritzer", char: "scarf" },
-    { name: "باتۇر", team: 1, weapon: "roller", char: "telpek" },
-    { name: "دىلشات", team: 1, weapon: "blaster", char: "dutar" },
-    { name: "گۈلنار", team: 1, weapon: "charger", char: "braids" },
-    { name: "تۇرسۇن", team: 1, weapon: "spritzer", char: "doppa" },
+  const BOTS: { name: string; team: Team; weapon: WeaponId; char: CharacterId; role: BotRole }[] = [
+    { name: "ئايگۈل", team: 1, weapon: "spritzer", char: "scarf", role: "painter" },
+    { name: "باتۇر", team: 1, weapon: "roller", char: "telpek", role: "defender" },
+    { name: "دىلشات", team: 1, weapon: "blaster", char: "dutar", role: "attacker" },
+    { name: "گۈلنار", team: 1, weapon: "charger", char: "braids", role: "hunter" },
+    { name: "تۇرسۇن", team: 1, weapon: "spritzer", char: "doppa", role: "painter" },
 
-    { name: "نىگار", team: 2, weapon: "spritzer", char: "braids" },
-    { name: "ئەركىن", team: 2, weapon: "charger", char: "doppa" },
-    { name: "مەرۋە", team: 2, weapon: "blaster", char: "scarf" },
-    { name: "ئالىم", team: 2, weapon: "roller", char: "wave" },
-    { name: "رەنا", team: 2, weapon: "spritzer", char: "dutar" },
-    { name: "سامەت", team: 2, weapon: "blaster", char: "telpek" },
+    { name: "نىگار", team: 2, weapon: "spritzer", char: "braids", role: "painter" },
+    { name: "ئەركىن", team: 2, weapon: "charger", char: "doppa", role: "hunter" },
+    { name: "مەرۋە", team: 2, weapon: "blaster", char: "scarf", role: "attacker" },
+    { name: "ئالىم", team: 2, weapon: "roller", char: "wave", role: "defender" },
+    { name: "رەنا", team: 2, weapon: "spritzer", char: "dutar", role: "painter" },
+    { name: "سامەت", team: 2, weapon: "blaster", char: "telpek", role: "attacker" },
   ];
 
   const actors: Actor[] = [];
@@ -1071,12 +1076,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       stuck: 0,
       char,
       mods: characterById(char).mods,
+      role: isPlayer ? "attacker" : "painter",
+      lives: 3,
       mesh: makeKid(team, name, char),
     };
   }
   const startChar = bridge.config.current.character;
   actors.push(blankActor("ۋارىس", 1, true, "spritzer", startChar));
-  BOTS.forEach((b) => actors.push(blankActor(b.name, b.team, false, b.weapon, b.char)));
+  BOTS.forEach((b) => {
+    const actor = blankActor(b.name, b.team, false, b.weapon, b.char);
+    actor.role = b.role;
+    actors.push(actor);
+  });
   let hero = makeKid(1, "ۋارىس", startChar);
   hero.root.visible = false;
 
@@ -1385,7 +1396,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (target.splat < 100) return;
     target.alive = false;
     target.deaths += 1;
-    target.respawn = target.isPlayer ? 2.7 : 2.2;
+    target.lives = Math.max(0, target.lives - 1);
+    target.respawn = bridge.config.current.gameMode === "survival" && target.lives <= 0 ? 9999 : target.isPlayer ? 2.7 : 2.2;
     target.swimming = false;
     target.mesh.root.visible = false;
     burst(target.x, target.y + 0.8, target.z, by?.team ?? (target.team === 1 ? 2 : 1), 28, 7);
@@ -1870,7 +1882,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const a = actors[0];
     if (!a.alive) {
       a.respawn -= dt;
-      if (a.respawn <= 0) respawn(a);
+      if (a.respawn <= 0 && !(bridge.config.current.gameMode === "survival" && a.lives <= 0)) respawn(a);
       return;
     }
     let f = 0;
@@ -2043,10 +2055,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     if (a.think <= 0) {
       a.think = (0.35 + rand() * 0.35) * T.think;
-      if (nearest && nd < (a.weapon === "charger" ? 26 : 16) * T.range) a.mode = "fight";
+      const fightRange = a.role === "hunter" ? (a.weapon === "charger" ? 32 : 21) : a.role === "attacker" ? 19 : a.role === "defender" ? 13 : 10;
+      if (nearest && nd < fightRange * T.range) a.mode = "fight";
       else {
         a.mode = "push";
         pickGoal(a);
+        if (a.role === "defender") {
+          a.goalX *= 0.45;
+          a.goalZ = a.team === 1 ? Math.min(a.goalZ, -4) : Math.max(a.goalZ, 4);
+        } else if (a.role === "attacker") {
+          a.goalZ += a.team === 1 ? 9 : -9;
+        }
       }
     }
     const floor = teamAt(a.x, a.z);
@@ -2176,7 +2195,20 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     recount();
     phase = "ended";
     paused = false;
-    const winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
+    let winner: "orange" | "violet" | "tie";
+    if (bridge.config.current.gameMode === "survival") {
+      const orangeLives = actors.filter((a) => a.team === 1).reduce((n, a) => n + a.lives + (a.alive ? 1 : 0), 0);
+      const violetLives = actors.filter((a) => a.team === 2).reduce((n, a) => n + a.lives + (a.alive ? 1 : 0), 0);
+      winner = orangeLives === violetLives ? "tie" : orangeLives > violetLives ? "orange" : "violet";
+    } else if (bridge.config.current.gameMode === "zone") {
+      // Zone mode weights the central battlefield heavily while retaining turf as a tie-breaker.
+      let orangeZone = 0, violetZone = 0;
+      for (let iz = Math.floor(GH * 0.34); iz < Math.ceil(GH * 0.66); iz++) for (let ix = Math.floor(GW * 0.28); ix < Math.ceil(GW * 0.72); ix++) {
+        const cell = grid[iz * GW + ix];
+        if (cell === 1) orangeZone++; else if (cell === 2) violetZone++;
+      }
+      winner = orangeZone === violetZone ? (Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet") : orangeZone > violetZone ? "orange" : "violet";
+    } else winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
     const p = actors[0];
     const board = buildBoard();
     const res: NonNullable<HudSnap["result"]> = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths, points: board[0].points, board };
@@ -2246,6 +2278,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     actors.forEach((a, idx) => {
       a.splats = 0;
       a.deaths = 0;
+      a.lives = bridge.config.current.gameMode === "survival" ? 3 : 99;
       a.painted = 0;
       a.alive = true;
       a.ink = 100;
@@ -2566,6 +2599,31 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         }
       }
       if (timeLeft > 0) {
+        eventClock += dt;
+        worldEventT = Math.max(0, worldEventT - dt);
+        if (worldEventT <= 0 && worldEvent !== "none") {
+          worldEvent = "none";
+          (scene.fog as THREE.Fog).near = 42;
+          (scene.fog as THREE.Fog).far = 110;
+          setBanner("ئاسمان ئېچىلدى");
+        }
+        if (worldEvent === "none" && eventClock > 42) {
+          eventClock = 0;
+          if (level.id === "oasis" && rand() > 0.35) {
+            worldEvent = "sandstorm";
+            worldEventT = 18;
+            (scene.fog as THREE.Fog).near = 12;
+            (scene.fog as THREE.Fog).far = 46;
+            setBanner("قۇم بورىنى!");
+          } else {
+            worldEvent = "festival";
+            worldEventT = 14;
+            setBanner("بايرام دولقۇنى! ئالاھىدە كۈچ تېز تولىدۇ");
+          }
+        }
+        if (worldEvent === "festival") {
+          for (const actor of actors) if (actor.alive) actor.special = Math.min(100, actor.special + dt * 2.2);
+        }
         updatePlayer(dt, input);
         for (let i = 1; i < actors.length; i++) updateBot(actors[i], dt);
         for (const p of projs) updateProj(p, dt);
@@ -2602,6 +2660,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         scoreAcc += dt;
         if (scoreAcc > 0.35) {
           scoreAcc = 0;
+    eventClock = 0;
+    worldEvent = "none";
+    worldEventT = 0;
+    (scene.fog as THREE.Fog).near = 42;
+    (scene.fog as THREE.Fog).far = 110;
           recount();
         }
       }
