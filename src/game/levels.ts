@@ -72,6 +72,32 @@ const sym = (ps: Prim[]) => [...ps, ...ps.map(mirror)];
 const flip = (spawns: [number, number][]) => spawns.map(([x, z]) => [-x, -z] as [number, number]);
 
 
+
+/** Dense playable old-city block: low roofs are reachable and the gaps become combat alleys. */
+function oldCityBlock(x: number, z: number, flipZ = false): Prim[] {
+  const dir = flipZ ? -1 : 1;
+  return [
+    box(x, 1.35, z, 7.5, 2.7, 5.5, 0xd39a68),
+    box(x, 2.82, z, 8.0, 0.22, 6.0, 0x8f5738, true),
+    stairs(x + 4.4, z + dir * 1.8, dir as 1 | -1, 3.2, 2.7, 5.2, 6, 0xc78a5a),
+    box(x - 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x + 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x - 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
+    box(x + 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
+    box(x, 3.95, z, 7.2, 0.16, 5.3, 0x6b4226, true),
+  ];
+}
+/** Bazaar arcade used as actual cover/chokepoint rather than background dressing. */
+function bazaarArcade(x: number, z: number): Prim[] {
+  const p: Prim[] = [box(x, 3.4, z, 10, 0.35, 3.4, 0xc98250, true)];
+  for (let i = -2; i <= 2; i++) {
+    p.push(box(x + i * 2.2, 1.55, z, 0.48, 3.1, 0.48, 0xb9784b));
+    p.push({ t: "dome", x: x + i * 2.2, y: 3.08, z, r: 0.55, c: 0x168f86 });
+  }
+  return p;
+}
+
 /** Decorative Uyghur architectural vocabulary built from cheap primitives.
  * These stay mostly at the arena edges so silhouettes become culturally distinct
  * without closing important combat lanes.
@@ -244,6 +270,15 @@ const BAZAAR: LevelDef = {
     ...courtyardFacade(20, 36, 12, 0xd49a67),
     ...minaret(-27.5, -31, BRICK, TILE),
     ...minaret(27.5, 31, BRICK, TILE),
+    // Dense playable old-city fabric: roofs, stairs and alleys are part of the fight.
+    ...oldCityBlock(-19, -24),
+    ...oldCityBlock(18, -23),
+    ...oldCityBlock(-18, 22, true),
+    ...oldCityBlock(19, 24, true),
+    ...oldCityBlock(-22, 9),
+    ...oldCityBlock(22, -8, true),
+    ...bazaarArcade(0, -25),
+    ...bazaarArcade(0, 25),
     // Central fountain: a tiled rim you have to hop over, and a domed spout.
     box(0, 0.45, -3.6, 8, 0.9, 0.8, TILE),
     box(0, 0.45, 3.6, 8, 0.9, 0.8, TILE),
@@ -263,7 +298,7 @@ const BAZAAR: LevelDef = {
       box(-4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
       box(4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
       box(0, 3.9, -20, 10, 0.6, 1.1, TILE),
-      // Market stalls with striped awnings.
+      // Market stalls with striped awnings. These fill the playable streets, not only the perimeter.
       ...stall(-11, -24, 0),
       ...stall(-11, -18, 1),
       ...stall(11, -24, 2),
