@@ -109,6 +109,11 @@
     --ink-deep: var(--color-violet-deep);
     --ink-fg: var(--color-foam);
   }
+  .ink-sun {
+    --ink: var(--color-sun);
+    --ink-deep: #c9a41f;
+    --ink-fg: var(--color-navy);
+  }
 
   /* ── Ink button: blob face, rising ink wave, drips, hover splatter ── */
   .ink-btn {
@@ -510,6 +515,49 @@
     font-family: var(--font-display);
     animation: count-pop 420ms var(--ink-spring) both;
   }
+
+  /* ── Mode HUD: zone control, survival lives, arena events ───── */
+  .zone-meter {
+    display: block;
+    height: 0.4rem;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-foam) 14%, transparent);
+  }
+  .zone-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ink);
+    transition: width 300ms linear;
+  }
+  .zone-held {
+    animation: zone-glow 1.4s ease-in-out infinite;
+  }
+  .zone-contested {
+    animation: hud-pulse 1.6s ease-in-out infinite;
+  }
+  .life-pip {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px 999px 999px 0.15rem;
+    transition: background-color 300ms linear;
+  }
+  .event-chip,
+  .spectate-card {
+    animation: count-pop 420ms var(--ink-spring) both;
+  }
+}
+
+@keyframes zone-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--ink) 50%, transparent);
+  }
 }
 
 @layer components {
@@ -585,6 +633,10 @@
   .special-ready-tag,
   .result-bar > span,
   .reward-chip,
+  .zone-held,
+  .zone-contested,
+  .event-chip,
+  .spectate-card,
   .end-splash,
   .results-in {
     animation: none !important;
