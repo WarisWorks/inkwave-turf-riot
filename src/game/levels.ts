@@ -73,6 +73,34 @@ const flip = (spawns: [number, number][]) => spawns.map(([x, z]) => [-x, -z] as 
 
 
 
+
+/** Elevated links and market pockets make the old city read as one connected combat space. */
+function roofBridge(x: number, z: number, w: number, alongX = true): Prim[] {
+  return alongX
+    ? [box(x, 3.05, z, w, 0.32, 1.8, 0x8b5739), box(x, 3.55, z - 0.8, w, 0.65, 0.16, 0x245f73, true), box(x, 3.55, z + 0.8, w, 0.65, 0.16, 0x245f73, true)]
+    : [box(x, 3.05, z, 1.8, 0.32, w, 0x8b5739), box(x - 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true), box(x + 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true)];
+}
+function marketCluster(x: number, z: number): Prim[] {
+  return [
+    box(x - 2.1, 0.7, z, 3.2, 1.4, 2.2, 0x9a613b),
+    box(x - 2.1, 1.62, z, 3.8, 0.14, 2.8, 0xc8102e, true),
+    box(x + 2.0, 0.65, z + 0.4, 3.0, 1.3, 2.0, 0x9a613b),
+    box(x + 2.0, 1.52, z + 0.4, 3.6, 0.14, 2.6, 0x168f86, true),
+    box(x - 2.8, 0.38, z - 1.7, 0.9, 0.76, 0.9, 0xe0a15a),
+    box(x + 2.7, 0.4, z - 1.5, 1.0, 0.8, 1.0, 0xb5652b),
+  ];
+}
+function rooftopPavilion(x: number, z: number): Prim[] {
+  return [
+    box(x - 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x + 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x - 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x + 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x, 3.0, z, 5.1, 0.18, 4.1, 0x168f86, true),
+    box(x, 3.22, z, 5.5, 0.16, 4.5, 0xf2c230, true),
+  ];
+}
+
 /** Dense playable old-city block: low roofs are reachable and the gaps become combat alleys. */
 function oldCityBlock(x: number, z: number, flipZ = false): Prim[] {
   const dir = flipZ ? -1 : 1;
@@ -279,6 +307,21 @@ const BAZAAR: LevelDef = {
     ...oldCityBlock(22, -8, true),
     ...bazaarArcade(0, -25),
     ...bazaarArcade(0, 25),
+    // Rooftop circulation and dense street life: the architecture IS the arena.
+    ...roofBridge(-9, -23, 9, true),
+    ...roofBridge(9, 23, 9, true),
+    ...roofBridge(-20, 15, 9, false),
+    ...roofBridge(20, -15, 9, false),
+    ...rooftopPavilion(-18, -23),
+    ...rooftopPavilion(18, 23),
+    ...marketCluster(-8, -17),
+    ...marketCluster(9, 16),
+    ...marketCluster(13, -6),
+    ...marketCluster(-13, 6),
+    box(-9, 1.0, -5, 8, 2.0, 1.0, 0xd6a06d),
+    box(10, 0.8, 6, 7, 1.6, 1.0, 0xc98b5a),
+    box(-5, 1.15, 13, 1.0, 2.3, 7, 0xd6a06d),
+    box(6, 0.95, -13, 1.0, 1.9, 7, 0xc98b5a),
     // Central fountain: a tiled rim you have to hop over, and a domed spout.
     box(0, 0.45, -3.6, 8, 0.9, 0.8, TILE),
     box(0, 0.45, 3.6, 8, 0.9, 0.8, TILE),

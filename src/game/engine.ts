@@ -275,9 +275,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   scene.fog = new THREE.Fog(0xcfe9ff, 42, 110);
   const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 200);
 
-  scene.add(new THREE.HemisphereLight(0xd7f1ff, 0xffd2ad, 1.25));
-  const sun = new THREE.DirectionalLight(0xfff6e4, 1.45);
-  sun.position.set(22, 34, 10);
+  scene.add(new THREE.HemisphereLight(0xffe4c2, 0xc97955, 1.38));
+  const sun = new THREE.DirectionalLight(0xffd3a0, 1.62);
+  sun.position.set(26, 30, -12);
   scene.add(sun);
 
   const fogCol = new THREE.Color(0xcfe9ff);
