@@ -47,16 +47,54 @@ export type BoardRow = {
   deaths: number;
   isPlayer: boolean;
   alive: boolean;
+  /** Lives left; only meaningful in Survival mode. */
+  lives: number;
 };
+
+/** Zone mode: the central rectangle both teams fight to hold. */
+export type ZoneSnap = {
+  /** Control points, 0–100; the first team to reach 100 wins by knockout. */
+  orange: number;
+  violet: number;
+  /** Share of the zone's paintable ground each team has inked, 0–1. */
+  orangeShare: number;
+  violetShare: number;
+  holder: "orange" | "violet" | null;
+};
+
+/** Survival mode: every fighter has a fixed number of lives. */
+export type SurvivalSnap = {
+  /** Lives left across the team. */
+  orange: number;
+  violet: number;
+  /** Fighters not yet eliminated. */
+  orangeUp: number;
+  violetUp: number;
+  /** Lives each fighter starts with. */
+  perFighter: number;
+  /** The player's own lives left. */
+  mine: number;
+  /** The player is out and spectating a teammate. */
+  out: boolean;
+  /** Name of the teammate the camera follows while out. */
+  watching: string;
+};
+
+export type WorldEventSnap = { kind: "sandstorm" | "festival"; left: number };
 
 export type MatchResult = {
   winner: "orange" | "violet" | "tie";
+  mode: GameMode;
   orange: number;
   blue: number;
   splats: number;
   deaths: number;
   points: number;
   board: BoardRow[];
+  /** Final zone control points (Zone mode), and whether a team hit 100. */
+  zone: { orange: number; violet: number; knockout: boolean } | null;
+  /** Lives left per team (Survival mode), and whether a team was wiped out. */
+  lives: { orange: number; violet: number; wipeout: boolean } | null;
 };
 
 export type HudSnap = {
@@ -85,6 +123,10 @@ export type HudSnap = {
   /** 0–1, fades after the player splats someone. */
   kill: number;
   board: BoardRow[];
+  mode: GameMode;
+  zone: ZoneSnap | null;
+  survival: SurvivalSnap | null;
+  event: WorldEventSnap | null;
 };
 
 export type WeaponInfo = {
@@ -224,8 +266,8 @@ export function characterById(id: CharacterId) {
 
 export const GAME_MODES: { id: GameMode; name: string; blurb: string }[] = [
   { id: "turf", name: "زېمىن جېڭى", blurb: "مۇسابىقە ئاخىرلاشقاندا ئەڭ كۆپ زېمىننى بويىغان ئەترەت غەلىبە قىلىدۇ." },
-  { id: "zone", name: "مەركەزنى ئىگىلەش", blurb: "مەركىزىي رايوننى بوياپ، ئۇنى كونترول قىلىپ نومۇر توپلاڭ." },
-  { id: "survival", name: "ئاخىرقى ئەترەت", blurb: "ھەر بىر جەڭچىنىڭ چەكلىك قايتا تىرىلىش پۇرسىتى بار. ئەترىتىڭىزنى ساقلاپ قېلىڭ." },
+  { id: "zone", name: "مەركەزنى ئىگىلەش", blurb: "مەركىزىي رايوننىڭ يېرىمىدىن كۆپىنى بوياپ ئىگىلەڭ. ئىگىلىگەن ۋاقىتتا نومۇر يىغىلىدۇ؛ 100 گە يەتسە نوكاۋت!" },
+  { id: "survival", name: "ئاخىرقى ئەترەت", blurb: "ھەر بىر جەڭچىنىڭ 3 جېنى بار. رەقىب ئەترىتىنى تولۇق تۈگىتىڭ ياكى ئاخىرىدا كۆپرەك جان ساقلاپ قېلىڭ." },
 ];
 
 export const DIFFICULTIES: { id: Difficulty; name: string }[] = [

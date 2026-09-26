@@ -2,6 +2,12 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode 
 import {
   Bomb,
   Check,
+  Coins,
+  Eye,
+  Heart,
+  PartyPopper,
+  Target,
+  Wind,
   CircleHelp,
   CloudRain,
   Crown,
@@ -23,7 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { EngineApi } from "../game/engine";
-import { LEVEL_DEFS, MAP, waterRects } from "../game/levels";
+import { LEVEL_DEFS, MAP, ZONE, waterRects } from "../game/levels";
 import { DEFAULT_SAVE, levelInfo, loadSave, matchCoins, matchXp, rankTitle, writeSave, type SaveData } from "../game/persist";
 import {
   CHARACTERS,
@@ -45,6 +51,7 @@ import {
   type InputState,
   type LevelId,
   type LiveConfig,
+  type MatchResult,
   type Quality,
   type SpecialId,
   type SubId,
@@ -341,11 +348,7 @@ export function InkWaveApp() {
 
       {playing && touchUi && hud && !hud.paused && hud.phase !== "ended" ? <TouchControls input={inputRef.current} /> : null}
 
-      {playing && hud?.phase !== "ended" ? (
-        <p className="pointer-events-none absolute top-[4.6rem] left-1/2 z-40 -translate-x-1/2 rounded-full bg-navy px-2 py-0.5 font-display text-xs text-foam">
-          {VERSION}
-        </p>
-      ) : playing ? null : (
+      {playing ? null : (
         <p className="pointer-events-none absolute bottom-3 left-3 z-40 rounded-full bg-navy px-2 py-1 font-display text-xs text-foam">{VERSION}</p>
       )}
     </div>
@@ -396,7 +399,7 @@ function Menu({
             </div>
           </div>
           <p className="text-base leading-ug text-muted">
-            مەيداننى سىياھ بىلەن بوياڭ. ۋاقىت توشقاندا تېخىمۇ كۆپ زېمىنغا ئىگە بولغان تەرەپ غەلىبە قىلىدۇ.
+            {(GAME_MODES.find((m) => m.id === save.gameMode) ?? GAME_MODES[0]).blurb}
           </p>
           <div className="flex flex-col gap-5 pb-4">
             <InkButton
@@ -410,7 +413,9 @@ function Menu({
               {ready ? (
                 <>
                   باشلاش
-                  <span className="ink-chip ms-auto">{levelById(save.level).name} · {difficultyName(save.difficulty)}</span>
+                  <span className="ink-chip ms-auto">
+                    {levelById(save.level).name} · {GAME_MODES.find((m) => m.id === save.gameMode)?.name ?? GAME_MODES[0].name}
+                  </span>
                 </>
               ) : (
                 <span className="text-lg">دولقۇن ئويغىنىۋاتىدۇ…</span>
@@ -474,6 +479,13 @@ function Menu({
               <dd className="font-display text-xl">{save.best}</dd>
             </div>
             <div>
+              <dt className="text-muted">تەڭگە</dt>
+              <dd className="flex items-center gap-1 font-display text-xl text-sun">
+                <Coins className="size-4" />
+                {save.coins}
+              </dd>
+            </div>
+            <div>
               <dt className="text-muted">قورال</dt>
               <dd className="font-display text-xl">{weapon}</dd>
             </div>
@@ -490,7 +502,9 @@ function Menu({
               <dd className="font-display text-lg leading-7">{levelById(save.level).name}</dd>
             </div>
           </dl>
-          <p className="mt-4 text-sm leading-ug text-muted">ئاپېلسىن گۇرۇپپا · 3 مىنۇتلۇق مۇسابىقە</p>
+          <p className="mt-4 text-sm leading-ug text-muted">
+            ئاپېلسىن گۇرۇپپا · 6 گە 6 · {difficultyName(save.difficulty)} رەقىب
+          </p>
         </section>
       </div>
     </div>
@@ -607,7 +621,7 @@ function Loadout({
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
 /** Top-down sketch of a level, drawn from the same data the engine builds from. */
-function MapPreview({ id, className = "" }: { id: LevelId; className?: string }) {
+function MapPreview({ id, zone = false, className = "" }: { id: LevelId; zone?: boolean; className?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -650,10 +664,19 @@ function MapPreview({ id, className = "" }: { id: LevelId; className?: string })
     g.fillRect(...rect(-6, -2, -35, -31.5));
     g.fillStyle = "#5b4dff";
     g.fillRect(...rect(2, 6, 31.5, 35));
+    if (zone) {
+      g.fillStyle = "rgba(255,229,106,0.18)";
+      g.fillRect(...rect(ZONE.minX, ZONE.maxX, ZONE.minZ, ZONE.maxZ));
+      g.setLineDash([5, 3]);
+      g.strokeStyle = "#ffe56a";
+      g.lineWidth = 2;
+      g.strokeRect(...rect(ZONE.minX, ZONE.maxX, ZONE.minZ, ZONE.maxZ));
+      g.setLineDash([]);
+    }
     g.strokeStyle = hex(def.wall);
     g.lineWidth = 4;
     g.strokeRect(0, 0, W, H);
-  }, [id]);
+  }, [id, zone]);
   return <canvas ref={ref} width={120} height={152} className={className} aria-hidden />;
 }
 
@@ -679,7 +702,7 @@ function StageScreen({ save, onBack, onLevel, onMode }: { save: SaveData; onBack
         <div className="grid gap-4 sm:grid-cols-2">
           {LEVELS.map((l) => (
             <InkOption key={l.id} selected={save.level === l.id} className="flex items-center gap-4 p-3" onClick={() => onLevel(l.id)}>
-              <MapPreview id={l.id} className="h-36 w-auto shrink-0 rounded-xl" />
+              <MapPreview id={l.id} zone={save.gameMode === "zone"} className="h-36 w-auto shrink-0 rounded-xl" />
               <span className="flex flex-col">
                 <span className="font-display text-xl leading-9">{l.name}</span>
                 <span className="text-sm leading-ug text-muted">{l.blurb}</span>
@@ -757,7 +780,22 @@ function HowTo({ onBack }: { onBack: () => void }) {
     { title: "قوشۇمچە / ئالاھىدە", keys: ["ئوڭ چېكىش", "C", "F"], text: "قوشۇمچە قورال ئۈچۈن ئوڭ چېكىش ياكى C. ئالاھىدە ماھارەت ئۆلچىگۈچى تولغاندا F نى بېسىڭ." },
     { title: "نەتىجە تاختىسى", keys: ["Tab"], text: "مۇسابىقە جەريانىدا Tab نى بېسىپ تۇرسىڭىز، ھەممە ئويۇنچىنىڭ بوياش نومۇرى ۋە چاچرىتىشلىرى كۆرۈنىدۇ." },
     { title: "چاچرىتىلىش", keys: [], text: "ساغلاملىق بالدىقى يوق. پۈتۈنلەي سىياھقا بويالسىڭىز، بازىدا قايتا پەيدا بولىسىز." },
-    { title: "غەلىبە", keys: [], text: "ئۈچ مىنۇت توشقاندا مەيداننىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
+    { title: "زېمىن جېڭى", keys: [], text: "ئۈچ مىنۇت توشقاندا مەيداننىڭ بىنەپشە گۇرۇپپىدىن كۆپرەك قىسمىغا ئىگە بولۇڭ." },
+    {
+      title: "مەركەزنى ئىگىلەش",
+      keys: [],
+      text: "ئوتتۇرىدىكى رامكىلىق رايوننىڭ يېرىمىدىن كۆپىنى بوياپ ئۇنى ئىگىلەڭ. ئىگىلىگەن ھەر سېكۇنتتا نومۇر يىغىلىدۇ؛ 100 گە بىرىنچى يەتكەن گۇرۇپپا نوكاۋت بىلەن ئۇتىدۇ.",
+    },
+    {
+      title: "ئاخىرقى ئەترەت",
+      keys: [],
+      text: "ھەر بىر جەڭچىنىڭ 3 جېنى بار. جېنى تۈگىگەن جەڭچى جەڭدىن چىقىدۇ. رەقىب ئەترىتىنى تولۇق تۈگىتىڭ ياكى ۋاقىت توشقاندا كۆپرەك جان ساقلاپ قېلىڭ.",
+    },
+    {
+      title: "مەيدان ھادىسىلىرى",
+      keys: [],
+      text: "مۇسابىقە جەريانىدا بايرام دولقۇنى ئالاھىدە ئۆلچىگۈچنى تېز تولدۇرىدۇ؛ تەكلىماكاندا قۇم بورىنى كۆرۈش دائىرىسىنى قىسقارتىدۇ.",
+    },
   ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
@@ -806,7 +844,8 @@ function Credits({ onBack }: { onBack: () => void }) {
   );
 }
 
-function TeamTable({ board, team, pct, mvp }: { board: BoardRow[]; team: "orange" | "violet"; pct: number; mvp: number }) {
+function TeamTable({ board, team, pct, mvp, mode }: { board: BoardRow[]; team: "orange" | "violet"; pct: number; mvp: number; mode: GameMode }) {
+  const survival = mode === "survival";
   const rows = board.map((r, idx) => ({ ...r, idx })).filter((r) => r.team === team).sort((a, b) => b.points - a.points);
   const tone = team === "orange" ? "text-orange" : "text-violet";
   return (
@@ -822,11 +861,12 @@ function TeamTable({ board, team, pct, mvp }: { board: BoardRow[]; team: "orange
             <th className="px-1 font-normal">نومۇر</th>
             <th className="px-1 font-normal">چاچرىتىش</th>
             <th className="px-1 font-normal">يۇيۇلۇش</th>
+            {survival ? <th className="px-1 font-normal">جان</th> : null}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.idx} className={`${r.isPlayer ? "board-me" : ""} ${r.alive ? "" : "opacity-55"}`}>
+            <tr key={r.idx} className={`${r.isPlayer ? "board-me" : ""} ${r.alive && !(survival && r.lives <= 0) ? "" : "opacity-55"}`}>
               <td className="px-2 py-1">
                 <span className="flex items-center gap-1.5 font-display text-base leading-7">
                   {r.idx === mvp ? <Crown className="size-4 shrink-0 text-sun" aria-label="ئەڭ ياخشى ئويۇنچى" /> : null}
@@ -838,6 +878,9 @@ function TeamTable({ board, team, pct, mvp }: { board: BoardRow[]; team: "orange
               <td className="px-1 text-center font-display text-base">{r.points}</td>
               <td className="px-1 text-center font-display text-base">{r.splats}</td>
               <td className="px-1 text-center font-display text-base">{r.deaths}</td>
+              {survival ? (
+                <td className="px-1 text-center font-display text-base">{r.lives > 0 ? r.lives : <span className="text-sm text-muted">چىقتى</span>}</td>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -846,12 +889,115 @@ function TeamTable({ board, team, pct, mvp }: { board: BoardRow[]; team: "orange
   );
 }
 
-function Scoreboard({ board, orange, blue }: { board: BoardRow[]; orange: number; blue: number }) {
+function Scoreboard({ board, orange, blue, mode }: { board: BoardRow[]; orange: number; blue: number; mode: GameMode }) {
   const mvp = mvpIndex(board);
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <TeamTable board={board} team="orange" pct={orange} mvp={mvp} />
-      <TeamTable board={board} team="violet" pct={blue} mvp={mvp} />
+      <TeamTable board={board} team="orange" pct={orange} mvp={mvp} mode={mode} />
+      <TeamTable board={board} team="violet" pct={blue} mvp={mvp} mode={mode} />
+    </div>
+  );
+}
+
+const TEAM_NAME = { orange: "ئاپېلسىن گۇرۇپپا", violet: "بىنەپشە گۇرۇپپا" } as const;
+
+/** The headline score for each mode: turf %, zone control points, or lives left. */
+function finalScore(r: MatchResult): { orange: string; violet: string; label: string } {
+  if (r.zone) return { orange: String(r.zone.orange), violet: String(r.zone.violet), label: "مەركەز نومۇرى" };
+  if (r.lives) return { orange: String(r.lives.orange), violet: String(r.lives.violet), label: "قالغان جان" };
+  return { orange: `${Math.round(r.orange * 100)}%`, violet: `${Math.round(r.blue * 100)}%`, label: "" };
+}
+
+function resultTitle(r: MatchResult) {
+  if (r.winner === "tie") return "تەڭ-تەڭ";
+  const team = TEAM_NAME[r.winner];
+  if (r.mode === "zone") return `${team} مەركەزنى ئىگىلىدى`;
+  if (r.mode === "survival") return `${team} ھايات قالدى`;
+  return `${team} زېمىننى ئالدى`;
+}
+
+function resultNote(r: MatchResult) {
+  if (r.zone?.knockout) return "نوكاۋت!";
+  if (r.lives?.wipeout) return r.winner === "orange" ? "رەقىب ئەترىتى تولۇق تۈگىتىلدى" : "ئەترىتىمىز تولۇق تۈگىتىلدى";
+  return "";
+}
+
+function resultBar(r: MatchResult) {
+  if (r.zone) {
+    const total = Math.max(100, r.zone.orange + r.zone.violet);
+    return { orange: r.zone.orange / total, violet: r.zone.violet / total };
+  }
+  if (r.lives) {
+    const total = r.lives.orange + r.lives.violet;
+    return total ? { orange: r.lives.orange / total, violet: r.lives.violet / total } : { orange: 0, violet: 0 };
+  }
+  return { orange: r.orange, violet: r.blue };
+}
+
+/** Team corner of the HUD: turf %, zone control points, or lives left, depending on the mode. */
+function TeamSticker({ team, hud }: { team: "orange" | "violet"; hud: HudSnap }) {
+  const isOrange = team === "orange";
+  const tone = isOrange ? "text-orange" : "text-violet";
+  const zone = hud.zone;
+  const sv = hud.survival;
+  const held = zone?.holder === team;
+  let main: ReactNode = `${Math.round((isOrange ? hud.orange : hud.blue) * 100)}%`;
+  let extra: ReactNode = null;
+  if (zone) {
+    const pts = Math.floor(isOrange ? zone.orange : zone.violet);
+    main = (
+      <span className="flex items-center gap-1">
+        {held ? <Target className={`size-5 ${tone}`} aria-label="مەركەزنى ئىگىلىدى" /> : null}
+        <span dir="ltr">{pts}</span>
+      </span>
+    );
+    extra = (
+      <span className={`zone-meter ${isOrange ? "ink-orange" : "ink-violet"}`} role="progressbar" aria-valuenow={pts} aria-valuemax={100}>
+        <span style={{ width: `${pts}%` }} />
+      </span>
+    );
+  } else if (sv) {
+    const fighters = hud.board.filter((r) => r.team === team);
+    main = (
+      <span className="flex items-center gap-1">
+        <Heart className={`size-5 fill-current ${tone}`} />
+        <span dir="ltr">{isOrange ? sv.orange : sv.violet}</span>
+      </span>
+    );
+    extra = (
+      <span className="mt-0.5 flex gap-1" aria-label={`${isOrange ? sv.orangeUp : sv.violetUp} جەڭچى قالدى`}>
+        {fighters.map((r, i) => (
+          <span key={i} className={`life-pip ${r.lives > 0 ? (isOrange ? "bg-orange" : "bg-violet") : "bg-foam/20"}`} />
+        ))}
+      </span>
+    );
+  }
+  return (
+    <div className={`min-w-20 rounded-sticker bg-navy/80 px-3 py-1 ${isOrange ? "" : "text-end"} ${held ? `zone-held ${isOrange ? "ink-orange" : "ink-violet"}` : ""}`}>
+      <p className={`font-display text-sm ${tone}`}>{isOrange ? "ئاپېلسىن" : "بىنەپشە"}</p>
+      <div className={`font-display text-2xl leading-8 ${isOrange ? "" : "flex justify-end"}`}>{main}</div>
+      {extra}
+    </div>
+  );
+}
+
+/** Zone mode: each team's share of the zone, with the capture line in the middle and who holds it. */
+function ZoneBar({ zone }: { zone: NonNullable<HudSnap["zone"]> }) {
+  const holder = zone.holder;
+  return (
+    <div className="mt-1 flex w-40 flex-col items-center md:w-64">
+      <div className="relative flex h-3 w-full overflow-hidden rounded-full bg-navy">
+        <span className="bg-orange transition-[width] duration-300" style={{ width: `${zone.orangeShare * 100}%` }} />
+        <span className="ms-auto bg-violet transition-[width] duration-300" style={{ width: `${zone.violetShare * 100}%` }} />
+        <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-foam/80" aria-hidden />
+      </div>
+      <p className={`mt-1 flex items-center gap-1.5 rounded-full bg-navy/85 px-3 text-sm whitespace-nowrap ${holder ? "" : "zone-contested"}`}>
+        <Target className="size-4" />
+        مەركەز:
+        <span className={holder === "orange" ? "text-orange" : holder === "violet" ? "text-violet" : "text-foam"}>
+          {holder === "orange" ? "ئاپېلسىن" : holder === "violet" ? "بىنەپشە" : "بىتەرەپ"}
+        </span>
+      </p>
     </div>
   );
 }
@@ -909,9 +1055,11 @@ function Hud({
   const spName = SPECIALS.find((s) => s.id === hud.specialId)?.name ?? "ئالاھىدە";
   const live = hud.phase === "live" && !hud.paused;
   const finalCount = live && hud.time <= 10;
-  const lowInk = live && hud.respawn <= 0 && hud.ink < 0.15 && !hud.swimming;
+  const lowInk = live && hud.respawn <= 0 && !hud.survival?.out && hud.ink < 0.15 && !hud.swimming;
   const specialReady = hud.special >= 1 && hud.respawn <= 0;
   const showBoard = boardOpen && hud.phase !== "ended" && !hud.paused;
+  const sv = hud.survival;
+  const out = sv?.out ?? false;
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       <div
@@ -923,10 +1071,7 @@ function Hud({
         }}
       />
       <div className="absolute top-3 right-3 left-3 flex items-start justify-between gap-3">
-        <div className="rounded-sticker bg-navy/80 px-3 py-1">
-          <p className="font-display text-sm text-orange">ئاپېلسىن</p>
-          <p className="font-display text-2xl leading-8">{Math.round(hud.orange * 100)}%</p>
-        </div>
+        <TeamSticker team="orange" hud={hud} />
         <div className="flex flex-col items-center">
           <p
             className={`font-display text-3xl transition-transform ${
@@ -935,15 +1080,26 @@ function Hud({
           >
             {clock(hud.time)}
           </p>
-          <div className="mt-1 flex h-3 w-40 overflow-hidden rounded-full bg-navy md:w-64">
-            <span className="bg-orange transition-[width] duration-300" style={{ width: `${hud.orange * 100}%` }} />
-            <span className="ms-auto bg-violet transition-[width] duration-300" style={{ width: `${hud.blue * 100}%` }} />
-          </div>
+          {hud.zone ? (
+            <ZoneBar zone={hud.zone} />
+          ) : (
+            <div className="mt-1 flex h-3 w-40 overflow-hidden rounded-full bg-navy md:w-64">
+              <span className="bg-orange transition-[width] duration-300" style={{ width: `${hud.orange * 100}%` }} />
+              <span className="ms-auto bg-violet transition-[width] duration-300" style={{ width: `${hud.blue * 100}%` }} />
+            </div>
+          )}
+          {hud.event && !ended ? (
+            <p key={hud.event.kind} className="event-chip mt-1.5 flex items-center gap-1.5 rounded-full bg-navy/85 px-3 text-sm whitespace-nowrap text-sun">
+              {hud.event.kind === "sandstorm" ? <Wind className="size-4" /> : <PartyPopper className="size-4" />}
+              {hud.event.kind === "sandstorm" ? "قۇم بورىنى" : "بايرام دولقۇنى"}
+              <span dir="ltr" className="text-foam">
+                {Math.ceil(hud.event.left)}
+              </span>
+            </p>
+          ) : null}
+          {!ended ? <p className="mt-1 rounded-full bg-navy px-2 py-0.5 font-display text-xs text-foam">{VERSION}</p> : null}
         </div>
-        <div className="rounded-sticker bg-navy/80 px-3 py-1 text-end">
-          <p className="font-display text-sm text-violet">بىنەپشە</p>
-          <p className="font-display text-2xl leading-8">{Math.round(hud.blue * 100)}%</p>
-        </div>
+        <TeamSticker team="violet" hud={hud} />
       </div>
 
       <div className="pointer-events-auto absolute top-20 right-3 flex items-start gap-2">
@@ -988,10 +1144,25 @@ function Hud({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-navy/45">
           <p className="font-display text-2xl">دولقۇنغا قايتىۋاتىسىز</p>
           <p className="font-display text-7xl text-orange">{Math.ceil(hud.respawn)}</p>
+          {sv ? (
+            <p className="mt-1 flex items-center gap-1.5 text-base text-foam">
+              <Heart className="size-4 fill-orange text-orange" /> {sv.mine === 1 ? "ئاخىرقى جېنىڭىز" : `${sv.mine} جان قالدى`}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute top-1/2 left-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2">
+      {out && !ended ? (
+        <div className="spectate-card absolute bottom-6 left-1/2 flex -translate-x-1/2 flex-col items-center rounded-sticker bg-navy/85 px-5 py-2 text-center">
+          <p className="font-display text-2xl text-orange">جەڭدىن چىقتىڭىز</p>
+          <p className="flex items-center gap-1.5 text-sm whitespace-nowrap text-foam">
+            <Eye className="size-4" />
+            {sv?.watching ? `كۆزىتىۋاتىسىز: ${sv.watching}` : "ئەترىتىڭىز جەڭ قىلىۋاتىدۇ"}
+          </p>
+        </div>
+      ) : null}
+
+      <div className={`pointer-events-none absolute top-1/2 left-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 ${out ? "hidden" : ""}`}>
         <span className="absolute top-1/2 left-0 h-0.5 w-2 -translate-y-1/2 bg-foam" />
         <span className="absolute top-1/2 right-0 h-0.5 w-2 -translate-y-1/2 bg-foam" />
         <span className="absolute top-0 left-1/2 h-2 w-0.5 -translate-x-1/2 bg-foam" />
@@ -1015,7 +1186,14 @@ function Hud({
         </p>
       ) : null}
 
-      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72 ${ended ? "hidden" : ""}`}>
+      <div className={`absolute right-3 flex flex-col items-center ${touch ? "bottom-52" : "bottom-4"} md:w-72 ${ended || out ? "hidden" : ""}`}>
+        {sv ? (
+          <div className="mb-1.5 flex items-center gap-1" role="img" aria-label={`${sv.mine} جان قالدى`}>
+            {Array.from({ length: sv.perFighter }, (_, i) => (
+              <Heart key={i} className={`size-5 ${i < sv.mine ? "fill-orange text-orange" : "text-foam/30"}`} />
+            ))}
+          </div>
+        ) : null}
         {specialReady ? (
           <p className="special-ready-tag mb-2 flex items-center gap-1.5 rounded-full bg-violet px-3 text-sm text-foam">
             <Sparkles className="size-4" /> {spName} تەييار{touch ? null : <Kbd>F</Kbd>}
@@ -1059,7 +1237,7 @@ function Hud({
           onClick={touch ? () => setBoardOpen(false) : undefined}
         >
           <div className="panel max-h-[70vh] overflow-y-auto p-4">
-            <Scoreboard board={hud.board} orange={hud.orange} blue={hud.blue} />
+            <Scoreboard board={hud.board} orange={hud.orange} blue={hud.blue} mode={hud.mode} />
           </div>
         </div>
       ) : null}
@@ -1084,10 +1262,11 @@ function Hud({
             {hud.result.winner === "orange" ? "غەلىبە!" : hud.result.winner === "violet" ? "مەغلۇپ بولدۇق" : "تەڭ-تەڭ"}
           </p>
           <p className="font-display text-3xl">
-            <span className="text-orange">{Math.round(hud.result.orange * 100)}%</span>
+            <span className="text-orange">{finalScore(hud.result).orange}</span>
             <span className="text-foam"> · </span>
-            <span className="text-violet">{Math.round(hud.result.blue * 100)}%</span>
+            <span className="text-violet">{finalScore(hud.result).violet}</span>
           </p>
+          {finalScore(hud.result).label ? <p className="text-sm text-muted">{finalScore(hud.result).label}</p> : null}
         </div>
       ) : null}
 
@@ -1096,18 +1275,27 @@ function Hud({
           <div className="results-in panel my-auto w-full max-w-3xl p-5 pb-9 md:p-6 md:pb-9">
             <span className="ikat-strip" aria-hidden />
             <div className="mt-3 text-center">
-              <p className="font-display text-base text-sun">مۇسابىقە ئاخىرلاشتى</p>
-              <h2 className="mt-1 font-display text-4xl leading-[1.5]">
-                {hud.result.winner === "orange"
-                  ? "ئاپېلسىن گۇرۇپپا زېمىننى ئالدى"
-                  : hud.result.winner === "violet"
-                    ? "بىنەپشە گۇرۇپپا زېمىننى ئالدى"
-                    : "تەڭ-تەڭ"}
-              </h2>
+              <p className="font-display text-base text-sun">
+                {GAME_MODES.find((m) => m.id === hud.result?.mode)?.name ?? ""} · مۇسابىقە ئاخىرلاشتى
+              </p>
+              <h2 className="mt-1 font-display text-4xl leading-[1.5]">{resultTitle(hud.result)}</h2>
+              {resultNote(hud.result) ? (
+                <p className="mx-auto mt-1 w-fit rounded-full bg-sun px-3 font-display text-base text-navy">{resultNote(hud.result)}</p>
+              ) : null}
               <div className="result-bar mx-auto mt-3 max-w-md">
-                <span className="bg-orange" style={{ width: `${hud.result.orange * 100}%` }} />
-                <span className="ms-auto bg-violet" style={{ width: `${hud.result.blue * 100}%` }} />
+                <span className="bg-orange" style={{ width: `${resultBar(hud.result).orange * 100}%` }} />
+                <span className="ms-auto bg-violet" style={{ width: `${resultBar(hud.result).violet * 100}%` }} />
               </div>
+              {hud.result.mode !== "turf" ? (
+                <p className="mt-2 text-sm text-foam">
+                  {finalScore(hud.result).label}: <span className="text-orange">{finalScore(hud.result).orange}</span> ·{" "}
+                  <span className="text-violet">{finalScore(hud.result).violet}</span>
+                  <span className="text-muted">
+                    {" "}
+                    · زېمىن {Math.round(hud.result.orange * 100)}% · {Math.round(hud.result.blue * 100)}%
+                  </span>
+                </p>
+              ) : null}
               <p className="mt-2 text-sm text-muted">
                 سىز {hud.result.points} نومۇر بويىدىڭىز · {hud.result.splats} رەقىبنى چاچرىتتىڭىز · {hud.result.deaths} قېتىم يۇيۇلدىڭىز
               </p>
@@ -1115,6 +1303,9 @@ function Hud({
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
                   <span className="reward-chip ink-orange">
                     <Sparkles className="size-4" /> <span dir="ltr">+{reward.xp}</span> تەجرىبە
+                  </span>
+                  <span className="reward-chip ink-sun">
+                    <Coins className="size-4" /> <span dir="ltr">+{reward.coins}</span> تەڭگە
                   </span>
                   {reward.levelUp ? (
                     <span className="reward-chip ink-violet">
@@ -1130,7 +1321,7 @@ function Hud({
               ) : null}
             </div>
             <div className="mt-5">
-              <Scoreboard board={hud.result.board} orange={hud.result.orange} blue={hud.result.blue} />
+              <Scoreboard board={hud.result.board} orange={hud.result.orange} blue={hud.result.blue} mode={hud.result.mode} />
             </div>
             <div className="mx-auto mt-6 flex max-w-md flex-col gap-5">
               <InkButton tone="orange" className="h-12 ps-1.5 pe-4 text-lg" icon={<RotateCcw className="size-4" />} onClick={onAgain}>

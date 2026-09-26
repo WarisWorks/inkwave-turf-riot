@@ -23,7 +23,8 @@ A desktop-first, Uyghur-language 6v6 ink shooter for players who want short, bro
 ## Decisions and constraints
 - Preserve the existing UI/engine bridge and data-driven level architecture.
 - Keep the Uyghur copy, RTL behavior, and existing visual identity.
-- Score the match before preparing the player model for the celebration; reviving a player changes Survival's alive-actor count.
+- Score the match before preparing the player model for the celebration. Survival counts lives left (`lives` already includes a standing fighter's current life), so the celebration respawn cannot change the result.
+- Zone mode shares one `ZONE` rectangle (`src/game/levels.ts`) between scoring, bots, the ground shader, the minimap and stage previews. `recount()` updates zone shares with turf; `updateZone()` applies capture hysteresis and banks control points.
 - The merged release uses the existing main-branch version, 2.0.0.
 - Regression checks use Node's test runner and the existing TypeScript parser to exercise the actual end-match function in isolation; they do not verify WebGL rendering.
 - Kashgar uses 0/2/4/6.4 m gameplay tiers and the existing XZ turf ownership grid. Roof and street ink at the same XZ share ownership; independent per-storey scoring is not implemented.

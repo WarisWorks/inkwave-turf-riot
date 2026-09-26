@@ -1,11 +1,16 @@
 # Project Progress
 
 ## Current Status
-All four environments are complete. The default player uses the optimized `cute.glb` runtime copy (676,516 bytes / 19,999 triangles), prepared from the user-confirmed `cute-character.glb`. The unused 61 MB original has now been removed at the user's request. It retains the black doppa, short curls, embroidered shirt and supplied walking/hand pose, with a fitted lightweight rig. Five runtime character models serve six choices; the prior corrected blue-doppa boy remains the dutar character. All 58 tests and the production build pass; eleven active GLBs ship in an 8.8 MiB build. Loadout and live gameplay were visually checked on the verified development server. Physical phone performance, detailed garment animation and competitive balance remain playtest tasks.
+All four environments are complete. Zone and Survival now play as their own modes (live zone control with knockouts, limited lives with elimination, spectating and wipeouts), arena events fire again, and the HUD/results are mode-aware; 68 tests pass. The default player uses the optimized `cute.glb` runtime copy (676,516 bytes / 19,999 triangles), prepared from the user-confirmed `cute-character.glb`. The unused 61 MB original has now been removed at the user's request. It retains the black doppa, short curls, embroidered shirt and supplied walking/hand pose, with a fitted lightweight rig. Five runtime character models serve six choices; the prior corrected blue-doppa boy remains the dutar character. All 58 tests and the production build pass; eleven active GLBs ship in an 8.8 MiB build. Loadout and live gameplay were visually checked on the verified development server. Physical phone performance, detailed garment animation and competitive balance remain playtest tasks.
 
 The reusable `add-glb-to-game` skill is documented in `skills/` and installed in the user's Codex skills directory.
 
 ## Completed
+- Fixed arena events never firing: the 0.35 s score tick reset the event clock. Events now reset at match start, clear at the whistle and menu, and the sandstorm eases fog/sky toward sand, including the painted-ground shader's fog.
+- Zone mode: live capture with hysteresis, 100-point knockout, ground border band + light curtain + minimap/stage-preview outline, bot zone duty, and a HUD with control points, zone share and holder.
+- Survival mode: lives-left scoring (no bonus for standing fighters), eliminated fighters stay down, a wiped-out team ends the match, lives HUD/hearts/pips, a spectator camera for an eliminated player, and a lives column on the scoreboard.
+- Mode-aware end banners, end splash and results (headline score, knockout/wipeout note), coins shown on results and the player card, mode shown on Play, How-to rows for each mode and events.
+- Removed 22 `Object3D.add` console errors per load from empty tentacle pivots.
 - Created the reusable `add-glb-to-game` skill, with Three.js integration notes covering model selection, optimization, rigs, loading, packaging, validation, and authorized source cleanup. Linked its project copy from the README.
 - Removed the unused `cute-character.glb` original, freeing 61,048,116 bytes while retaining all eleven active GLBs and manifest provenance. Character regeneration now requires an external source path.
 - Integrated the new confirmed `cute-character.glb` as default `wave`, retaining saves/perks and optimizing its 61 MB source to 677 KB. Preserved UV seams and smoothed normals; the later cleanup removed the original.
@@ -52,7 +57,6 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 ## Known Issues
 - The five active source character files have no original skeletons or animation clips. Lightweight generated rigs preserve the new boy’s carry pose, the earlier boy’s hand-on-doppa pose, and restrained arm movement for dresses whose sculpted sleeves touch the garment. Facial expressions remain baked; detailed animation and physical-device checks remain follow-up work.
 - The previous session's native build limitation is resolved locally after installing the project lockfile dependencies. Production builds now pass. Vite still reports the large engine chunk warning (about 733 kB including shared Three.js code, with a separate 45 kB GLTFLoader chunk).
-- Existing main-branch world-event timers are reset in the periodic score-recount block, apparently preventing the 42-second event trigger; this pre-existing issue is outside the conflict-resolution scope.
 - Automated tests isolate actual gameplay functions and navigation modules; they do not replace full competitive playtests. Browser checks cover all four environments, decoded models, shaders, sampled live gameplay and menu-based stage switching. Urumqi uses closed building envelopes, with separate central-tower volumes; facade recesses and interiors remain inaccessible.
 - Turf retains the original shared XZ ownership: roof and street at the same position share ink/scoring. Building interiors and precise collision against ornamental recesses are intentionally not implemented.
 - The requested reference image directory was absent; the user explicitly approved proceeding from the written direction.
@@ -72,9 +76,36 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 ## Next Recommended Tasks
 1. Playtest roof/street combat and route balance on desktop and a physical phone.
 2. Confirm the deployment preview and tune quality/performance from device measurements.
-3. Investigate the pre-existing world-event timer reset separately; consider character draw-call batching if mobile profiling warrants it.
+3. Tune Zone capture thresholds and Survival lives from real playtests; consider character draw-call batching if mobile profiling warrants it.
 
 ## Session History
+
+### 2026-09-26 — Game-mode and HUD review
+
+**Goal**
+Check the v2.0.0 core/UI update and make its new features work as described.
+
+**Completed**
+- Found arena events could never trigger (their reset sat inside the score tick) and fixed it; sandstorm fog now reaches the ground shader and eases in/out.
+- Made Zone a real mode: continuous capture/control scoring with knockout, in-world/minimap/preview zone marking, bot zone duty, and HUD/result support.
+- Made Survival a real mode: correct lives scoring, permanent elimination, wipeout early end, spectating, lives HUD and scoreboard column.
+- Mode-aware banners, results and menu text; coins visible; How-to covers every mode; version badge moved into the HUD centre stack so it never overlaps chips.
+- Fixed pre-existing empty `Object3D.add` errors (22 per load).
+- `tsc -b`, `npm run build` and `npm test` (68 tests, including 6 new zone-rule tests and extended end-match cases) pass.
+- Headless SwiftShader playtests: zone capture/flip/knockout and results (Urumqi), survival respawn/elimination/spectate/wipeout and results (Kashgar), natural event trigger and sandstorm (Taklamakan), menu and stage screens.
+
+**Files Changed**
+- `src/game/engine.ts`, `src/game/types.ts`, `src/game/levels.ts`
+- `src/components/InkWaveApp.tsx`, `src/styles.css`
+- `tests/end-match.test.mjs`, `tests/zone-mode.test.mjs`
+- `README.md`, `PROJECT.md`, `PROGRESS.md`
+
+**Important Notes**
+- Survival scoring changed from `lives + alive` to `lives`; the old formula gave standing fighters an extra life. End-match tests were updated to the corrected rule.
+- `HudSnap` gained `mode`, `zone`, `survival` and `event`; `MatchResult` gained `mode`, `zone` and `lives`; `BoardRow` gained `lives`.
+
+**Next**
+- Playtest Zone thresholds (50% capture / 12-point lead / 36% hold) and Survival's 3 lives with real players.
 
 ### 2026-09-26
 
