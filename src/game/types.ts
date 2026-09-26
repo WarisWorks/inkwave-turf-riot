@@ -1,11 +1,11 @@
 export type WeaponId = "spritzer" | "roller" | "charger" | "blaster";
 export type SubId = "pop-bomb" | "ink-beacon";
-export type SpecialId = "tempest" | "reef-rush";
+export type SpecialId = "burst" | "tempest" | "reef-rush";
 export type Quality = "low" | "high";
 export type Difficulty = "easy" | "normal" | "hard";
 export type GameMode = "turf" | "zone" | "survival";
 export type BotRole = "attacker" | "painter" | "defender" | "hunter";
-export type LevelId = "harbor" | "bazaar" | "oasis" | "vineyard";
+export type LevelId = "urumqi" | "bazaar" | "oasis" | "vineyard";
 export type CharacterId = "wave" | "doppa" | "braids" | "telpek" | "scarf" | "dutar";
 
 export type InputState = {
@@ -47,16 +47,54 @@ export type BoardRow = {
   deaths: number;
   isPlayer: boolean;
   alive: boolean;
+  /** Lives left; only meaningful in Survival mode. */
+  lives: number;
 };
+
+/** Zone mode: the central rectangle both teams fight to hold. */
+export type ZoneSnap = {
+  /** Control points, 0–100; the first team to reach 100 wins by knockout. */
+  orange: number;
+  violet: number;
+  /** Share of the zone's paintable ground each team has inked, 0–1. */
+  orangeShare: number;
+  violetShare: number;
+  holder: "orange" | "violet" | null;
+};
+
+/** Survival mode: every fighter has a fixed number of lives. */
+export type SurvivalSnap = {
+  /** Lives left across the team. */
+  orange: number;
+  violet: number;
+  /** Fighters not yet eliminated. */
+  orangeUp: number;
+  violetUp: number;
+  /** Lives each fighter starts with. */
+  perFighter: number;
+  /** The player's own lives left. */
+  mine: number;
+  /** The player is out and spectating a teammate. */
+  out: boolean;
+  /** Name of the teammate the camera follows while out. */
+  watching: string;
+};
+
+export type WorldEventSnap = { kind: "sandstorm" | "festival"; left: number };
 
 export type MatchResult = {
   winner: "orange" | "violet" | "tie";
+  mode: GameMode;
   orange: number;
   blue: number;
   splats: number;
   deaths: number;
   points: number;
   board: BoardRow[];
+  /** Final zone control points (Zone mode), and whether a team hit 100. */
+  zone: { orange: number; violet: number; knockout: boolean } | null;
+  /** Lives left per team (Survival mode), and whether a team was wiped out. */
+  lives: { orange: number; violet: number; wipeout: boolean } | null;
 };
 
 export type HudSnap = {
@@ -85,6 +123,10 @@ export type HudSnap = {
   /** 0–1, fades after the player splats someone. */
   kill: number;
   board: BoardRow[];
+  mode: GameMode;
+  zone: ZoneSnap | null;
+  survival: SurvivalSnap | null;
+  event: WorldEventSnap | null;
 };
 
 export type WeaponInfo = {
@@ -152,12 +194,17 @@ export const SUBS: { id: SubId; name: string; blurb: string }[] = [
 ];
 
 export const SPECIALS: { id: SpecialId; name: string; blurb: string }[] = [
+  {
+    id: "burst",
+    name: "سىياھ پارتلىشى",
+    blurb: "قىسقا كۈچ يىغىپ، ئەتراپىڭىزدىكى كەڭ زېمىننى بىراقلا سىياھقا چۆمدۈرىدۇ ۋە يېقىندىكى رەقىبلەرنى چاچرىتىدۇ.",
+  },
   { id: "tempest", name: "سىياھ بورىنى", blurb: "يامغۇر بۇلۇتى چوڭ بىر دائىرە زېمىننى سىياھقا چىلايدۇ." },
   { id: "reef-rush", name: "مەرجان يۈگۈرۈشى", blurb: "خالىغان يەرگە ئۇچقاندەك يۈگۈرۈپ، ئارقىڭىزدا بويالغان ئىز قالدۇرۇڭ." },
 ];
 
 export const LEVELS: { id: LevelId; name: string; blurb: string }[] = [
-  { id: "harbor", name: "پورت", blurb: "ئوتتۇرىدىن سۇ ئۆتىدۇ — ئىككى پىرىستان ياكى مەركىزى سۇپا ئارقىلىق ئۆتۈڭ." },
+  { id: "urumqi", name: "ئۈرۈمچى", blurb: "چوڭ بازار بىناسى، ئېگىز مۇنار ۋە كەڭ مەيدان — يان سۇپىلاردىن پايدىلىنىڭ." },
   { id: "bazaar", name: "قەشقەر بازىرى", blurb: "دۇكانلار، دەرۋازىلار ۋە ئوتتۇرىدىكى فونتان — يېقىن ئارىلىقتىكى قىزغىن جەڭ." },
   { id: "oasis", name: "تەكلىماكان ۋاھەسى", blurb: "قۇم دۆڭلىرى، قەدىمىي خارابىلەر ۋە ئوتتۇرىدىكى كۆل." },
   { id: "vineyard", name: "تۇرپان ئۈزۈمزارلىقى", blurb: "ئۈزۈم باراڭلىرى، كارىز ئېرىقى ۋە ئوتلۇق تاغ مەنزىرىسى." },
@@ -175,7 +222,7 @@ export type CharacterInfo = { id: CharacterId; name: string; trait: string; blur
 const BASE_MODS: CharacterMods = { run: 1, swim: 1, armor: 1, meter: 1, ink: 1 };
 
 export const CHARACTERS: CharacterInfo[] = [
-  { id: "wave", name: "دولقۇنچاق", trait: "تەڭپۇڭ", blurb: "سىياھ چېچى بىلەن ھەممە ئىشقا تەييار.", mods: BASE_MODS },
+  { id: "wave", name: "دوپپىلىق بالا", trait: "تەڭپۇڭ", blurb: "قارا دوپپا ۋە نەقىشلىك كۆڭلەك كىيگەن چاققان بالا.", mods: BASE_MODS },
   {
     id: "doppa",
     name: "دوپپىلىق يىگىت",
@@ -199,9 +246,9 @@ export const CHARACTERS: CharacterInfo[] = [
   },
   {
     id: "scarf",
-    name: "ئەتلەس ياغلىقلىق قىز",
+    name: "ئەتلەس كىيىملىك قىز",
     trait: "ئالاھىدە ماھارەت ‎+15%",
-    blurb: "ئەتلەس ياغلىقى ئالاھىدە كۈچنى تېز يىغىدۇ.",
+    blurb: "رەڭدار ئەتلەس كىيىملىك قىز ئالاھىدە كۈچنى تېز يىغىدۇ.",
     mods: { ...BASE_MODS, meter: 1.15 },
   },
   {
@@ -219,8 +266,8 @@ export function characterById(id: CharacterId) {
 
 export const GAME_MODES: { id: GameMode; name: string; blurb: string }[] = [
   { id: "turf", name: "زېمىن جېڭى", blurb: "مۇسابىقە ئاخىرلاشقاندا ئەڭ كۆپ زېمىننى بويىغان ئەترەت غەلىبە قىلىدۇ." },
-  { id: "zone", name: "مەركەزنى ئىگىلەش", blurb: "مەركىزىي رايوننى بوياپ، ئۇنى كونترول قىلىپ نومۇر توپلاڭ." },
-  { id: "survival", name: "ئاخىرقى ئەترەت", blurb: "ھەر بىر جەڭچىنىڭ چەكلىك قايتا تىرىلىش پۇرسىتى بار. ئەترىتىڭىزنى ساقلاپ قېلىڭ." },
+  { id: "zone", name: "مەركەزنى ئىگىلەش", blurb: "مەركىزىي رايوننىڭ يېرىمىدىن كۆپىنى بوياپ ئىگىلەڭ. ئىگىلىگەن ۋاقىتتا نومۇر يىغىلىدۇ؛ 100 گە يەتسە نوكاۋت!" },
+  { id: "survival", name: "ئاخىرقى ئەترەت", blurb: "ھەر بىر جەڭچىنىڭ 3 جېنى بار. رەقىب ئەترىتىنى تولۇق تۈگىتىڭ ياكى ئاخىرىدا كۆپرەك جان ساقلاپ قېلىڭ." },
 ];
 
 export const DIFFICULTIES: { id: Difficulty; name: string }[] = [

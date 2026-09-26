@@ -26,6 +26,11 @@
   --color-violet-deep: #3a2dc2;
   --color-sun: #ffe56a;
   --color-sea: #128fb0;
+  /* Lobby: neon lime signs, near-black outlines and dark slate panels. */
+  --color-lime: #c9f03a;
+  --color-lime-deep: #86ad0c;
+  --color-ink: #0d0d14;
+  --color-slate: #1d1d27;
   --radius-sticker: 1.15rem;
 }
 
@@ -108,6 +113,11 @@
     --ink: var(--color-violet);
     --ink-deep: var(--color-violet-deep);
     --ink-fg: var(--color-foam);
+  }
+  .ink-sun {
+    --ink: var(--color-sun);
+    --ink-deep: #c9a41f;
+    --ink-fg: var(--color-navy);
   }
 
   /* ── Ink button: blob face, rising ink wave, drips, hover splatter ── */
@@ -510,6 +520,492 @@
     font-family: var(--font-display);
     animation: count-pop 420ms var(--ink-spring) both;
   }
+
+  /* ── Lobby (main menu): hanging signs, slanted tags, status card ── */
+  .lobby-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(circle, rgb(0 0 0 / 0.16) 1.1px, transparent 1.6px) 0 0 / 7px 7px,
+      radial-gradient(ellipse at 50% 45%, transparent 35%, rgb(13 13 20 / 0.62) 100%);
+  }
+
+  .lobby-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+  }
+  .lobby-logo-kicker {
+    rotate: -2deg;
+    border-radius: 0.45rem 0.3rem 0.5rem 0.35rem;
+    background: var(--color-ink);
+    padding: 0 0.75rem;
+    color: var(--color-lime);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    line-height: 2;
+  }
+  .lobby-logo-title {
+    rotate: -1.5deg;
+    color: var(--color-foam);
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 6.5vw, 3.5rem);
+    line-height: 1.3;
+    -webkit-text-stroke: 0.16em var(--color-ink);
+    paint-order: stroke fill;
+    text-shadow: 0 0.1em 0 var(--color-ink);
+  }
+  .lobby-logo-tape {
+    margin-top: -0.55rem;
+    margin-inline-start: 2.2rem;
+    rotate: 2.5deg;
+    border: 3px solid var(--color-ink);
+    border-radius: 0.35rem;
+    background:
+      repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.14) 0 6px, transparent 6px 12px),
+      var(--color-orange);
+    padding: 0 1.1rem;
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    line-height: 1.8;
+    box-shadow: 0 0.25rem 0 var(--color-ink);
+  }
+
+  .sign-lime {
+    --sign: var(--color-lime);
+    --sign-deep: var(--color-lime-deep);
+    --sign-fg: var(--color-ink);
+  }
+  .sign-orange {
+    --sign: var(--color-orange);
+    --sign-deep: var(--color-orange-deep);
+    --sign-fg: var(--color-ink);
+  }
+  .sign-violet {
+    --sign: var(--color-violet);
+    --sign-deep: var(--color-violet-deep);
+    --sign-fg: var(--color-foam);
+  }
+
+  .lobby-sign {
+    --tilt: 0deg;
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.3rem 0.7rem;
+    min-height: 5.2rem;
+    border: 4px solid var(--color-ink);
+    border-radius: 1.5rem 1.1rem 1.6rem 1.2rem;
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--sign-deep) 60%, transparent) 1.3px, transparent 1.9px) 0 0 / 9px 9px,
+      linear-gradient(165deg, color-mix(in srgb, var(--sign) 82%, white), var(--sign) 45%, var(--sign-deep));
+    padding: 0.7rem 0.9rem 0.7rem;
+    color: var(--sign-fg);
+    text-align: start;
+    box-shadow:
+      inset 0 3px 0 rgb(255 255 255 / 0.45),
+      0 0.45rem 0 0 var(--color-ink);
+    rotate: var(--tilt);
+    transition:
+      rotate 260ms var(--ink-spring),
+      translate 200ms var(--ink-spring),
+      box-shadow 160ms linear,
+      filter 160ms linear;
+  }
+  /* Big faded splat in the corner, like a sign's printed emblem. */
+  .lobby-sign::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset-inline-end: -0.6rem;
+    bottom: -0.8rem;
+    width: 6.5rem;
+    aspect-ratio: 1;
+    background: var(--sign-deep);
+    opacity: 0.45;
+    mask: var(--ink-splat) center / contain no-repeat;
+    rotate: 18deg;
+  }
+  .lobby-sign:hover:not(:disabled),
+  .lobby-sign:focus-visible {
+    rotate: calc(var(--tilt) * -0.5);
+    translate: 0 -3px;
+    filter: brightness(1.06);
+  }
+  .lobby-sign:active:not(:disabled) {
+    translate: 0 4px;
+    box-shadow:
+      inset 0 3px 0 rgb(255 255 255 / 0.45),
+      0 0.1rem 0 0 var(--color-ink);
+  }
+  .lobby-sign:disabled {
+    cursor: progress;
+    filter: saturate(0.45) brightness(0.8);
+  }
+  /* The tab it hangs from. */
+  .sign-hanger {
+    position: absolute;
+    top: -1.05rem;
+    inset-inline-start: 1.4rem;
+    width: 2.8rem;
+    height: 1.2rem;
+    border: 4px solid var(--color-ink);
+    border-bottom: 0;
+    border-radius: 0.8rem 0.8rem 0 0;
+    background: radial-gradient(circle at 50% 70%, var(--color-ink) 0.28rem, var(--sign) 0.34rem);
+  }
+  .sign-badge {
+    position: relative;
+    display: grid;
+    width: 3rem;
+    aspect-ratio: 1;
+    place-items: center;
+    color: var(--sign);
+  }
+  .sign-badge-splat {
+    position: absolute;
+    inset: 0;
+    background: var(--color-ink);
+    mask: var(--ink-splat) center / contain no-repeat;
+  }
+  .sign-badge > svg {
+    position: relative;
+  }
+  .sign-title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 1.3rem;
+    line-height: 1.6;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 0.08em 0 rgb(0 0 0 / 0.16);
+  }
+  .sign-caption {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    min-width: 0;
+    overflow: hidden;
+    rotate: -1.2deg;
+    border-radius: 0.5rem 0.35rem 0.55rem 0.4rem;
+    background: color-mix(in srgb, var(--color-ink) 82%, transparent);
+    padding: 0 0.7rem;
+    color: var(--sign);
+    font-size: 0.9rem;
+    line-height: 2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lobby-sign-hero {
+    min-height: 7rem;
+    padding: 0.9rem 1.1rem 0.85rem;
+    animation: sign-sway 4.5s ease-in-out infinite;
+  }
+  .lobby-sign-hero:hover:not(:disabled),
+  .lobby-sign-hero:focus-visible {
+    animation-play-state: paused;
+  }
+  .lobby-sign-hero .sign-badge {
+    width: 4.1rem;
+  }
+  .lobby-sign-hero .sign-title {
+    font-size: 2.3rem;
+    line-height: 1.45;
+  }
+  .lobby-sign-hero .sign-caption {
+    font-size: 1rem;
+  }
+  .lobby-sign-hero::after {
+    width: 9rem;
+  }
+
+  .lobby-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.9rem;
+    transform: skewX(-9deg);
+    border: 3px solid var(--color-ink);
+    border-radius: 0.45rem;
+    background:
+      repeating-linear-gradient(-55deg, rgb(255 255 255 / 0.07) 0 5px, transparent 5px 10px),
+      var(--color-slate);
+    padding-inline: 0.4rem 1rem;
+    color: var(--color-foam);
+    font-size: 1rem;
+    box-shadow: 0 0.3rem 0 var(--color-ink);
+    transition:
+      translate 160ms var(--ink-spring),
+      background-color 160ms linear,
+      box-shadow 160ms linear;
+  }
+  .lobby-tag > * {
+    transform: skewX(9deg);
+  }
+  .lobby-tag:hover,
+  .lobby-tag:focus-visible {
+    translate: 0 -2px;
+    background-color: #2c2c3a;
+  }
+  .lobby-tag:active {
+    translate: 0 3px;
+    box-shadow: 0 0.05rem 0 var(--color-ink);
+  }
+  .lobby-tag-icon {
+    display: grid;
+    width: 1.9rem;
+    aspect-ratio: 1;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--color-foam);
+    color: var(--color-ink);
+  }
+  .lobby-tag-sm {
+    height: 2.1rem;
+    padding-inline: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    box-shadow: 0 0.2rem 0 var(--color-ink);
+  }
+  .lobby-tag-sm .lobby-tag-icon {
+    width: 1.4rem;
+  }
+
+  .status-card {
+    position: relative;
+    border: 4px solid var(--color-ink);
+    border-radius: 1.5rem 1.05rem 1.6rem 1.15rem;
+    background:
+      radial-gradient(circle, rgb(255 255 255 / 0.06) 1.1px, transparent 1.6px) 0 0 / 8px 8px,
+      linear-gradient(180deg, #23232f, #15151d);
+    padding: 1.3rem 1rem 1rem;
+    box-shadow:
+      inset 0 0 0 2px rgb(255 255 255 / 0.06),
+      0 0.5rem 0 var(--color-ink);
+  }
+  .status-tape {
+    position: absolute;
+    top: -1rem;
+    inset-inline-start: 1rem;
+    rotate: -3deg;
+    border: 3px solid var(--color-ink);
+    border-radius: 0.35rem;
+    background: var(--color-lime);
+    padding: 0 0.8rem;
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    line-height: 1.8;
+    box-shadow: 0 0.2rem 0 var(--color-ink);
+  }
+  /* Chunky, slightly italic digits for levels, coins and stats. */
+  .status-digits {
+    display: inline-block;
+    transform: skewX(-7deg);
+    font-family: "Fredoka", var(--font-display);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .coin-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 3px solid var(--color-ink);
+    border-radius: 999px;
+    background: #0b0b11;
+    padding: 0.1rem 0.75rem 0.1rem 0.2rem;
+    color: var(--color-foam);
+  }
+  .coin-icon {
+    display: grid;
+    width: 1.75rem;
+    aspect-ratio: 1;
+    place-items: center;
+    border: 2px solid var(--color-ink);
+    border-radius: 999px;
+    background: radial-gradient(circle at 35% 30%, #fff6b0, var(--color-sun) 55%, #d9b21f);
+    color: #7a5a00;
+  }
+  .xp-bar {
+    position: relative;
+    display: block;
+    height: 1.7rem;
+    overflow: hidden;
+    border: 3px solid var(--color-ink);
+    border-radius: 999px;
+    background: #0b0b11;
+  }
+  .xp-fill {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    background: repeating-linear-gradient(-45deg, var(--color-lime) 0 8px, var(--color-lime-deep) 8px 16px);
+    transition: width 400ms ease-out;
+  }
+  .xp-text {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--color-foam);
+    font-size: 0.95rem;
+    -webkit-text-stroke: 0.2em var(--color-ink);
+    paint-order: stroke fill;
+  }
+
+  .nameplate {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border: 3px solid var(--color-ink);
+    border-radius: 0.9rem;
+    background:
+      linear-gradient(90deg, rgb(13 13 20 / 0.05), rgb(13 13 20 / 0.82) 62%),
+      var(--ikat) 0 0 / 5.5rem 1.4rem;
+    padding: 0.2rem 0.9rem 0.35rem;
+    cursor: text;
+    box-shadow: 0 0.3rem 0 var(--color-ink);
+  }
+  .nameplate:focus-within {
+    outline: 3px solid var(--color-sun);
+    outline-offset: 3px;
+  }
+  .nameplate-title {
+    display: block;
+    color: var(--color-sun);
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    line-height: 1.8;
+  }
+  .nameplate-input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding-inline-end: 1.4rem;
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 1.7rem;
+    line-height: 1.5;
+    -webkit-text-stroke: 0.12em var(--color-ink);
+    paint-order: stroke fill;
+  }
+  .nameplate-input:focus-visible {
+    outline: none;
+  }
+  .nameplate-pen {
+    position: absolute;
+    bottom: 0.9rem;
+    inset-inline-end: 0.75rem;
+    color: rgb(255 255 255 / 0.7);
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 3px dotted rgb(255 255 255 / 0.2);
+    padding-block: 0.3rem;
+  }
+  .status-label {
+    color: var(--color-foam);
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+  }
+  .status-mode {
+    padding-block: 0.1rem 0.3rem;
+    color: var(--color-lime);
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    line-height: 1.6;
+    -webkit-text-stroke: 0.1em var(--color-ink);
+    paint-order: stroke fill;
+  }
+  .stage-thumb {
+    height: 4.6rem;
+    width: auto;
+    flex-shrink: 0;
+    border: 3px solid var(--color-ink);
+    border-radius: 0.6rem;
+    box-shadow: 0 0.2rem 0 var(--color-ink);
+  }
+  .stat-cell {
+    border-radius: 0.6rem;
+    background: rgb(0 0 0 / 0.3);
+    padding: 0.15rem 0.7rem 0.35rem;
+  }
+
+  /* ── Mode HUD: zone control, survival lives, arena events ───── */
+  .zone-meter {
+    display: block;
+    height: 0.4rem;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-foam) 14%, transparent);
+  }
+  .zone-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ink);
+    transition: width 300ms linear;
+  }
+  .zone-held {
+    animation: zone-glow 1.4s ease-in-out infinite;
+  }
+  .zone-contested {
+    animation: hud-pulse 1.6s ease-in-out infinite;
+  }
+  .life-pip {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px 999px 999px 0.15rem;
+    transition: background-color 300ms linear;
+  }
+  .event-chip,
+  .spectate-card {
+    animation: count-pop 420ms var(--ink-spring) both;
+  }
+}
+
+@keyframes sign-sway {
+  50% {
+    rotate: calc(var(--tilt) + 1deg);
+  }
+}
+
+@keyframes zone-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--ink) 50%, transparent);
+  }
+}
+
+@layer components {
+  .end-splash {
+    text-shadow: 0 0.3rem 0 var(--color-navy);
+    animation: count-pop 520ms var(--ink-spring) both;
+  }
+  .results-in {
+    animation: results-in 480ms var(--ink-spring) both;
+  }
+}
+
+@keyframes results-in {
+  from {
+    opacity: 0;
+    translate: -2.5rem 0;
+  }
 }
 
 @keyframes hud-pulse {
@@ -567,7 +1063,15 @@
   .special-ready,
   .special-ready-tag,
   .result-bar > span,
-  .reward-chip {
+  .reward-chip,
+  .lobby-sign,
+  .lobby-tag,
+  .zone-held,
+  .zone-contested,
+  .event-chip,
+  .spectate-card,
+  .end-splash,
+  .results-in {
     animation: none !important;
     transition: none !important;
   }
@@ -578,4 +1082,19 @@
   .ink-option:active {
     transform: none;
   }
+}
+
+.environment-perf {
+  position: fixed;
+  z-index: 100;
+  bottom: 12px;
+  right: 12px;
+  padding: 10px 14px;
+  border: 1px solid #a8c9c966;
+  border-radius: 8px;
+  background: #102033e8;
+  color: #e1f2e6;
+  font: 12px/1.6 ui-monospace, monospace;
+  white-space: pre;
+  pointer-events: none;
 }

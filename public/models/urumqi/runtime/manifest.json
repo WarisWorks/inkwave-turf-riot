@@ -1,0 +1,122 @@
+[
+  {
+    "source": "urumqi-1.glb",
+    "sourceSha256": "2f377a6335ed9341ca5b094a2c6ec95c11ae9685c1468e056caabb356630b3d9",
+    "sourceBytes": 54326720,
+    "sourceTriangles": 1758050,
+    "runtimeBytes": 758344,
+    "runtimeTriangles": 15742,
+    "vertices": 13506,
+    "simplificationError": 0.005858976393938065,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.2804717421531677,
+        0.000030517578125,
+        -0.4917755126953125
+      ],
+      "max": [
+        0.2800750136375427,
+        0.630523681640625,
+        0.4918365478515625
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "source": "urumqi-2.glb",
+    "sourceSha256": "981b1ad821f247c9e1dffcf745efe553aaf6f9906affc4d846d1dee4c5b2f4fb",
+    "sourceBytes": 2352016,
+    "sourceTriangles": 46357,
+    "runtimeBytes": 721332,
+    "runtimeTriangles": 15985,
+    "vertices": 13488,
+    "simplificationError": 0.0025835006963461637,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.2695617079734802,
+        0,
+        -0.49932861328125
+      ],
+      "max": [
+        0.2691650092601776,
+        0.6538695693016052,
+        0.5
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "source": "urumqi-3.glb",
+    "sourceSha256": "70b9184f336411913dd216de8141a8705c2bda7941b13ae40cefebf999ed66e4",
+    "sourceBytes": 58959324,
+    "sourceTriangles": 1908700,
+    "runtimeBytes": 1124228,
+    "runtimeTriangles": 27006,
+    "vertices": 22724,
+    "simplificationError": 0.0021414607763290405,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.473419189453125,
+        0.000244140625,
+        -0.49017333984375
+      ],
+      "max": [
+        -0.18150325119495392,
+        0.832855224609375,
+        0.490142822265625
+      ]
+    },
+    "removeFloatingParts": true
+  },
+  {
+    "source": "urumqi-4.glb",
+    "sourceSha256": "96e99b74e87f58ea2722039d7725625c3d41d1d621c36dc968884095ae00044e",
+    "sourceBytes": 27137956,
+    "sourceTriangles": 822427,
+    "runtimeBytes": 729396,
+    "runtimeTriangles": 16000,
+    "vertices": 11914,
+    "simplificationError": 0.003009687177836895,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.25286865234375,
+        0.0001373291015625,
+        -0.499908447265625
+      ],
+      "max": [
+        0.252349853515625,
+        0.3991241455078125,
+        0.4986572265625
+      ]
+    },
+    "removeFloatingParts": false
+  },
+  {
+    "source": "urumqi-5.glb",
+    "sourceSha256": "d517b0c18f439c07b95fb6d48a5e557f4d2ce0306f74e6fa163774f23b5f0e47",
+    "sourceBytes": 28390916,
+    "sourceTriangles": 865563,
+    "runtimeBytes": 724044,
+    "runtimeTriangles": 15980,
+    "vertices": 12470,
+    "simplificationError": 0.004142220132052898,
+    "maxTextureSize": 1024,
+    "bounds": {
+      "min": [
+        -0.35443115234375,
+        0.00048828125,
+        -0.498687744140625
+      ],
+      "max": [
+        0.354400634765625,
+        0.60302734375,
+        0.499542236328125
+      ]
+    },
+    "removeFloatingParts": false
+  }
+]

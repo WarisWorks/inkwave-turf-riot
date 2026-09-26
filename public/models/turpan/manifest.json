@@ -1,0 +1,11 @@
+{
+  "source": "historic minaret 3d model.glb",
+  "sourceSha256": "35f6562c879e9d7b8946be7141a884d1a3f5308f10ef3db29266e7a20f61bcfd",
+  "sourceBytes": 57919628,
+  "sourceTriangles": 1897127,
+  "runtimeBytes": 949908,
+  "runtimeTriangles": 23988,
+  "vertices": 18431,
+  "simplificationError": 0.003382687456905842,
+  "maxTextureSize": 1024
+}

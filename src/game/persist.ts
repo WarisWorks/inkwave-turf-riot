@@ -31,7 +31,7 @@ export const DEFAULT_SAVE: SaveData = {
   name: "ۋارىس",
   weapon: "spritzer",
   sub: "pop-bomb",
-  special: "tempest",
+  special: "burst",
   wins: 0,
   matches: 0,
   splats: 0,
@@ -40,7 +40,7 @@ export const DEFAULT_SAVE: SaveData = {
   invertY: false,
   quality: "high",
   difficulty: "normal",
-  level: "harbor",
+  level: "urumqi",
   character: "wave",
   gameMode: "turf",
   coins: 0,
@@ -81,9 +81,9 @@ export function loadSave(): SaveData {
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SAVE };
-    const parsed = JSON.parse(raw) as Partial<SaveData>;
+    const parsed = JSON.parse(raw) as Partial<Omit<SaveData, "level">> & { level?: LevelId | "harbor" };
     if (parsed.version !== 1) return { ...DEFAULT_SAVE };
-    const save = { ...DEFAULT_SAVE, ...parsed, version: 1 as const };
+    const save: SaveData = { ...DEFAULT_SAVE, ...parsed, level: parsed.level === "harbor" ? "urumqi" : parsed.level ?? DEFAULT_SAVE.level, version: 1 };
     // Saves from the English build still carry the old Latin default name.
     if (save.name === "Waris") save.name = DEFAULT_SAVE.name;
     return save;
