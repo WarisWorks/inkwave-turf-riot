@@ -209,6 +209,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let hudAcc = 0;
   let miniAcc = 0;
   let scoreAcc = 0;
+  let eventClock = 0;
+  let worldEvent: "none" | "sandstorm" | "festival" = "none";
+  let worldEventT = 0;
   let dead = false;
   let raf = 0;
   let lookDX = 0;
@@ -2596,6 +2599,31 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         }
       }
       if (timeLeft > 0) {
+        eventClock += dt;
+        worldEventT = Math.max(0, worldEventT - dt);
+        if (worldEventT <= 0 && worldEvent !== "none") {
+          worldEvent = "none";
+          (scene.fog as THREE.Fog).near = 42;
+          (scene.fog as THREE.Fog).far = 110;
+          setBanner("ئاسمان ئېچىلدى");
+        }
+        if (worldEvent === "none" && eventClock > 42) {
+          eventClock = 0;
+          if (level.id === "oasis" && rand() > 0.35) {
+            worldEvent = "sandstorm";
+            worldEventT = 18;
+            (scene.fog as THREE.Fog).near = 12;
+            (scene.fog as THREE.Fog).far = 46;
+            setBanner("قۇم بورىنى!");
+          } else {
+            worldEvent = "festival";
+            worldEventT = 14;
+            setBanner("بايرام دولقۇنى! ئالاھىدە كۈچ تېز تولىدۇ");
+          }
+        }
+        if (worldEvent === "festival") {
+          for (const actor of actors) if (actor.alive) actor.special = Math.min(100, actor.special + dt * 2.2);
+        }
         updatePlayer(dt, input);
         for (let i = 1; i < actors.length; i++) updateBot(actors[i], dt);
         for (const p of projs) updateProj(p, dt);
@@ -2632,6 +2660,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         scoreAcc += dt;
         if (scoreAcc > 0.35) {
           scoreAcc = 0;
+    eventClock = 0;
+    worldEvent = "none";
+    worldEventT = 0;
+    (scene.fog as THREE.Fog).near = 42;
+    (scene.fog as THREE.Fog).far = 110;
           recount();
         }
       }
