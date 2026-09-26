@@ -9,9 +9,9 @@ import { CollisionIndex, levelColliders, stairBoxes } from "./environment/collis
 import { CityNavigation, type NavPoint } from "./environment/cityNavigation";
 import type { CollisionBox } from "./environment/environmentTypes";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { LEVEL_DEFS, MAP, waterRects, type LevelDef, type Rect } from "./levels";
+import { LEVEL_DEFS, MAP, ZONE, waterRects, type LevelDef, type Rect } from "./levels";
 import { SPECIALS, characterById } from "./types";
-import type { BoardRow, BotRole, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, SpecialId, SubId, WeaponId } from "./types";
+import type { BoardRow, BotRole, CharacterId, CharacterMods, Difficulty, HudSnap, InputState, LevelId, LiveConfig, MatchResult, SpecialId, SubId, WeaponId } from "./types";
 
 const GW = 120;
 const GH = 152;
@@ -19,6 +19,22 @@ const TW = 480;
 const TH = 608;
 // Match length in seconds; VITE_MATCH_LEN shortens it for local testing.
 const MATCH_LEN = Number(import.meta.env.VITE_MATCH_LEN) || 180;
+
+/** Zone mode: paint-grid cells covered by the zone (end-exclusive). */
+const ZONE_CELLS = {
+  x0: Math.round(((ZONE.minX - MAP.minX) / MAP.w) * GW),
+  x1: Math.round(((ZONE.maxX - MAP.minX) / MAP.w) * GW),
+  z0: Math.round(((ZONE.minZ - MAP.minZ) / MAP.d) * GH),
+  z1: Math.round(((ZONE.maxZ - MAP.minZ) / MAP.d) * GH),
+};
+/** A team takes the zone at this share of its ground while leading by ZONE_LEAD, and keeps it until below ZONE_HOLD. */
+const ZONE_CAPTURE = 0.5;
+const ZONE_LEAD = 0.12;
+const ZONE_HOLD = 0.36;
+/** Control points per second while holding the zone; 100 points is a knockout (60 s of control). */
+const ZONE_RATE = 100 / 60;
+/** Survival mode: lives each fighter starts with. */
+const SURVIVAL_LIVES = 3;
 const GRAV = 22;
 const STEP = 1 / 60;
 
@@ -254,6 +270,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   let eventClock = 0;
   let worldEvent: "none" | "sandstorm" | "festival" = "none";
   let worldEventT = 0;
+  /** 0–1 sandstorm strength, eased so the dust rolls in and clears over a couple of seconds. */
+  let stormK = 0;
+  /** Zone mode: control points per team (0–100), each team's share of the zone's ground, and who holds it. */
+  const zonePts = { orange: 0, violet: 0 };
+  let zoneShareO = 0;
+  let zoneShareV = 0;
+  let zoneHolder: 0 | Team = 0;
+  let zoneKO = false;
+  /** Survival mode: a short beat between a team's last elimination and the whistle. */
+  let wipeT = 0;
+  /** Survival mode: the teammate the camera follows once the player is out. */
+  let watchIdx = -1;
   let dead = false;
   let raf = 0;
   let lookDX = 0;
@@ -327,6 +355,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   scene.add(sun);
 
   const fogCol = new THREE.Color(0xcfe9ff);
+  /** The level's own fog and sky, which the sandstorm blends away from and back to. */
+  const baseFog = new THREE.Color(0xcfe9ff);
+  const baseSky = new THREE.Color(0x8fd4ff);
+  const SAND_FOG = new THREE.Color(0xd9b07a);
+  const skyCol = new THREE.Color();
   const sunDir = new THREE.Vector3(0.42, 0.86, 0.28).normalize();
   const inkMat = new THREE.ShaderMaterial({
     uniforms: {
@@ -339,6 +372,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       fogColor: { value: fogCol },
       fogNear: { value: 42 },
       fogFar: { value: 110 },
+      zoneOn: { value: 0 },
+      zoneMin: { value: new THREE.Vector2(ZONE.minX, ZONE.minZ) },
+      zoneMax: { value: new THREE.Vector2(ZONE.maxX, ZONE.maxZ) },
+      zoneTint: { value: new THREE.Color(0xf4f7fb) },
+      zonePulse: { value: 0 },
     },
     vertexShader: `
       attribute vec3 color;
@@ -363,6 +401,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       uniform vec3 fogColor;
       uniform float fogNear;
       uniform float fogFar;
+      uniform float zoneOn;
+      uniform vec2 zoneMin;
+      uniform vec2 zoneMax;
+      uniform vec3 zoneTint;
+      uniform float zonePulse;
       varying vec3 vColor;
       varying vec3 vWorld;
       varying vec3 vNormalW;
@@ -388,6 +431,19 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         vec4 ink = texture2D(inkMap, clamp(uv, 0.0, 1.0));
         float upFace = smoothstep(0.4, 0.85, n.y);
         vec3 col = mix(base, ink.rgb, clamp(ink.a, 0.0, 1.0) * upFace);
+        if (zoneOn > 0.5) {
+          // Zone mode: a dashed border band just inside the zone, over any ink, plus a faint wash.
+          vec2 lo = vWorld.xz - zoneMin;
+          vec2 hi = zoneMax - vWorld.xz;
+          float edge = min(min(lo.x, lo.y), min(hi.x, hi.y));
+          float inside = step(0.0, edge);
+          float dash = mix(0.55, 1.0, step(0.5, fract((vWorld.x + vWorld.z) * 0.6)));
+          float band = inside * (1.0 - smoothstep(0.42, 0.6, edge)) * dash;
+          // Lighten the band so it still reads on top of the holder's own ink.
+          vec3 edgeCol = mix(zoneTint, vec3(1.0), 0.45);
+          col = mix(col, zoneTint, upFace * inside * 0.08);
+          col = mix(col, edgeCol, upFace * band * (0.8 + 0.2 * zonePulse));
+        }
         float fog = smoothstep(fogNear, fogFar, length(vWorld - cameraPosition));
         col = mix(col, fogColor, fog);
         gl_FragColor = vec4(col, 1.0);
@@ -397,6 +453,49 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       }
     `,
   });
+
+  // Zone mode: a soft light curtain round the zone, tinted by whichever team holds it.
+  const zoneFade = (() => {
+    const c = document.createElement("canvas");
+    c.width = 2;
+    c.height = 64;
+    const g = c.getContext("2d");
+    if (g) {
+      const grad = g.createLinearGradient(0, 64, 0, 0);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(0.3, "rgba(255,255,255,0.6)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 2, 64);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+  const zoneCurtainMat = new THREE.MeshBasicMaterial({ map: zoneFade, color: 0xf4f7fb, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
+  const zoneMarker = new THREE.Group();
+  {
+    const H = 2.2;
+    const cx = (ZONE.minX + ZONE.maxX) / 2;
+    const cz = (ZONE.minZ + ZONE.maxZ) / 2;
+    const w = ZONE.maxX - ZONE.minX;
+    const d = ZONE.maxZ - ZONE.minZ;
+    const sides: [number, number, number, number][] = [
+      [cx, ZONE.minZ, w, 0],
+      [cx, ZONE.maxZ, w, 0],
+      [ZONE.minX, cz, d, Math.PI / 2],
+      [ZONE.maxX, cz, d, Math.PI / 2],
+    ];
+    for (const [x, z, len, rot] of sides) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), zoneCurtainMat);
+      m.position.set(x, H / 2 + 0.03, z);
+      m.rotation.y = rot;
+      m.renderOrder = 3;
+      zoneMarker.add(m);
+    }
+  }
+  zoneMarker.visible = false;
+  scene.add(zoneMarker);
 
   function colorize(geo: THREE.BufferGeometry, hex: number) {
     const c = new THREE.Color(hex);
@@ -632,10 +731,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     hangBanner(-16, 38.45, Math.PI, 1);
     hangBanner(20, 38.45, Math.PI, 2);
 
-    renderer.setClearColor(def.sky, 1);
-    (scene.background as THREE.Color).set(def.sky);
-    (scene.fog as THREE.Fog).color.set(def.fog);
-    fogCol.set(def.fog);
+    baseSky.set(def.sky);
+    baseFog.set(def.fog);
+    stormK = 0;
+    applyWeather(0);
     inkMat.uniforms.cityStyle.value = (def.id === "bazaar" || def.id === "urumqi") ? 1 : 0;
     inkMat.uniforms.desertStyle.value = def.id === "oasis" ? 1 : 0;
     skyLight.color.set(def.id === "bazaar" ? 0xc5e4ff : 0xffe4c2);
@@ -769,6 +868,53 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
     orangePct = t ? o / t : 0;
     bluePct = t ? b / t : 0;
+    // Zone shares: paintable ground inside the centre rectangle only.
+    o = 0;
+    b = 0;
+    t = 0;
+    for (let iz = ZONE_CELLS.z0; iz < ZONE_CELLS.z1; iz++) {
+      for (let ix = ZONE_CELLS.x0; ix < ZONE_CELLS.x1; ix++) {
+        const i = iz * GW + ix;
+        if (!mask[i]) continue;
+        t++;
+        if (grid[i] === 1) o++;
+        else if (grid[i] === 2) b++;
+      }
+    }
+    zoneShareO = t ? o / t : 0;
+    zoneShareV = t ? b / t : 0;
+  }
+
+  /** Zone mode: capture with hysteresis, then bank control points; 100 is a knockout. */
+  function updateZone(dt: number) {
+    let holder = zoneHolder;
+    const lead = zoneShareO - zoneShareV;
+    if (zoneShareO >= ZONE_CAPTURE && lead >= ZONE_LEAD) holder = 1;
+    else if (zoneShareV >= ZONE_CAPTURE && -lead >= ZONE_LEAD) holder = 2;
+    else if (holder === 1 && zoneShareO < ZONE_HOLD) holder = 0;
+    else if (holder === 2 && zoneShareV < ZONE_HOLD) holder = 0;
+    if (holder !== zoneHolder) {
+      if (holder === 1) {
+        setBanner("مەركەز بىزنىڭ!");
+        pushFeed("ئاپېلسىن گۇرۇپپا مەركەزنى ئالدى");
+        audio.chime();
+      } else if (holder === 2) {
+        setBanner("رەقىب مەركەزنى ئالدى!");
+        pushFeed("بىنەپشە گۇرۇپپا مەركەزنى ئالدى");
+        audio.thud();
+      } else {
+        setBanner(zoneHolder === 1 ? "مەركەز قولدىن كەتتى" : "رەقىب مەركەزنى يوقاتتى!");
+        audio.blip();
+      }
+      zoneHolder = holder;
+    }
+    if (!holder) return;
+    const key = holder === 1 ? "orange" : "violet";
+    zonePts[key] = Math.min(100, zonePts[key] + ZONE_RATE * dt);
+    if (zonePts[key] >= 100) {
+      zoneKO = true;
+      endMatch();
+    }
   }
 
   function clearInk() {
@@ -962,7 +1108,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     pivot.rotation.z = 0.35 * side;
     const inner = new THREE.Group();
     inner.rotation.z = -0.35 * side;
-    inner.add(...parts);
+    // add() with no arguments logs a THREE error, and plain tentacle pivots start empty.
+    if (parts.length) inner.add(...parts);
     pivot.add(inner);
     return pivot;
   }
@@ -1788,7 +1935,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     target.alive = false;
     target.deaths += 1;
     target.lives = Math.max(0, target.lives - 1);
-    target.respawn = bridge.config.current.gameMode === "survival" && target.lives <= 0 ? 9999 : target.isPlayer ? 2.7 : 2.2;
+    const out = isSurvival() && target.lives <= 0;
+    target.respawn = out ? 0 : target.isPlayer ? 2.7 : 2.2;
     target.swimming = false;
     target.mesh.root.visible = false;
     burst(target.x, target.y + 0.8, target.z, by?.team ?? (target.team === 1 ? 2 : 1), 28, 7);
@@ -1811,6 +1959,22 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     } else {
       pushFeed(target.isPlayer ? "سىز چاچرىتىلدىڭىز" : `${target.name} چاچرىتىلدى`);
     }
+    if (out) {
+      pushFeed(target.isPlayer ? "سىز جەڭدىن چىقتىڭىز" : `${target.name} جەڭدىن چىقتى`);
+      if (target.isPlayer) setBanner("جەڭدىن چىقتىڭىز");
+      else if (target.team === actors[0].team && actors[0].lives > 0 && actors.every((o) => o.isPlayer || o.team !== target.team || o.lives <= 0)) {
+        setBanner("ئاخىرقى جەڭچى سىز!");
+      }
+    }
+  }
+
+  const isSurvival = () => bridge.config.current.gameMode === "survival";
+  /** Survival: a fighter who has spent every life stays down for the rest of the match. */
+  const isOut = (a: Actor) => isSurvival() && !a.alive && a.lives <= 0;
+  function teamLives(team: Team) {
+    let n = 0;
+    for (const a of actors) if (a.team === team) n += a.lives;
+    return n;
   }
 
   function spawnProj(p: Omit<Proj, "alive" | "stuck" | "trail" | "trailAcc"> & { trail?: number }) {
@@ -2339,7 +2503,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const a = actors[0];
     if (!a.alive) {
       a.respawn -= dt;
-      if (a.respawn <= 0 && !(bridge.config.current.gameMode === "survival" && a.lives <= 0)) respawn(a);
+      if (a.respawn <= 0 && !isOut(a)) respawn(a);
       return;
     }
     let f = 0;
@@ -2430,6 +2594,44 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (cityNavigation) {
       const point = cityNavigation.nodes[cityNavigation.nearest({ x: bestX, y: surfaceTop(bestX, bestZ), z: bestZ })];
       if (point) { bestX = point.x; bestZ = point.z; }
+    }
+    a.goalX = bestX;
+    a.goalZ = bestZ;
+  }
+
+  /** Zone mode: painters and defenders work the zone; attackers join whenever their team does not hold it. */
+  function onZoneDuty(a: Actor) {
+    if (a.role === "painter" || a.role === "defender") return true;
+    return a.role === "attacker" && zoneHolder !== a.team;
+  }
+
+  /** Zone mode: head for a patch of the zone the team has not inked yet. */
+  function pickZoneGoal(a: Actor) {
+    let bestX = 0;
+    let bestZ = 0;
+    let best = -Infinity;
+    for (let n = 0; n < 10; n++) {
+      const x = ZONE.minX + 1 + rand() * (ZONE.maxX - ZONE.minX - 2);
+      const z = ZONE.minZ + 1 + rand() * (ZONE.maxZ - ZONE.minZ - 2);
+      if (waterAt(x, z, 0.8)) continue;
+      const owner = teamAt(x, z);
+      const score = (owner === a.team ? 0 : owner === 0 ? 2 : 3) - Math.hypot(x - a.x, z - a.z) * 0.03 + rand() * 0.6;
+      if (score > best) {
+        best = score;
+        bestX = x;
+        bestZ = z;
+      }
+    }
+    if (best === -Infinity) {
+      pickGoal(a);
+      return;
+    }
+    if (cityNavigation) {
+      const point = cityNavigation.nodes[cityNavigation.nearest({ x: bestX, y: surfaceTop(bestX, bestZ), z: bestZ })];
+      if (point) {
+        bestX = point.x;
+        bestZ = point.z;
+      }
     }
     a.goalX = bestX;
     a.goalZ = bestZ;
@@ -2530,7 +2732,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function updateBot(a: Actor, dt: number) {
     if (!a.alive) {
       a.respawn -= dt;
-      if (a.respawn <= 0) respawn(a);
+      if (a.respawn <= 0 && !isOut(a)) respawn(a);
       return;
     }
     if (countdown > 0) {
@@ -2561,8 +2763,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (a.think <= 0) {
       a.think = (0.35 + rand() * 0.35) * T.think;
       const fightRange = a.role === "hunter" ? (a.weapon === "charger" ? 32 : 21) : a.role === "attacker" ? 19 : a.role === "defender" ? 13 : 10;
-      if (nearest && nd < fightRange * T.range) a.mode = "fight";
-      else {
+      // Dust hides distant targets during a sandstorm.
+      const sight = worldEvent === "sandstorm" ? 0.65 : 1;
+      if (nearest && nd < fightRange * T.range * sight) a.mode = "fight";
+      else if (bridge.config.current.gameMode === "zone" && onZoneDuty(a)) {
+        a.mode = "push";
+        pickZoneGoal(a);
+      } else {
         a.mode = "push";
         pickGoal(a);
         if (a.role === "defender") {
@@ -2699,6 +2906,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.yaw = a.team === 1 ? Math.PI : 0;
     a.charge = 0;
     a.mesh.root.visible = mode === "play";
+    if (a.isPlayer && isSurvival() && a.lives === 1 && phase === "live") setBanner("ئاخىرقى جېنىڭىز!");
   }
 
   function endMatch() {
@@ -2707,21 +2915,32 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     phase = "ended";
     paused = false;
     // Resolve scoring before the celebration revives a defeated player.
-    let winner: "orange" | "violet" | "tie";
-    if (bridge.config.current.gameMode === "survival") {
-      const orangeLives = actors.filter((a) => a.team === 1).reduce((n, a) => n + a.lives + (a.alive ? 1 : 0), 0);
-      const violetLives = actors.filter((a) => a.team === 2).reduce((n, a) => n + a.lives + (a.alive ? 1 : 0), 0);
-      winner = orangeLives === violetLives ? "tie" : orangeLives > violetLives ? "orange" : "violet";
-    } else if (bridge.config.current.gameMode === "zone") {
-      // Zone mode weights the central battlefield heavily while retaining turf as a tie-breaker.
-      let orangeZone = 0, violetZone = 0;
-      for (let iz = Math.floor(GH * 0.34); iz < Math.ceil(GH * 0.66); iz++) for (let ix = Math.floor(GW * 0.28); ix < Math.ceil(GW * 0.72); ix++) {
-        const cell = grid[iz * GW + ix];
-        if (cell === 1) orangeZone++; else if (cell === 2) violetZone++;
+    const gameMode = bridge.config.current.gameMode;
+    const byTurf = (): MatchResult["winner"] => (Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet");
+    let winner: MatchResult["winner"];
+    let zone: MatchResult["zone"] = null;
+    let lives: MatchResult["lives"] = null;
+    if (gameMode === "survival") {
+      // Lives left decide it. A fighter still standing has no bonus life, so the celebration respawn cannot change the result.
+      let o = 0;
+      let v = 0;
+      for (const a of actors) {
+        if (a.team === 1) o += a.lives;
+        else v += a.lives;
       }
-      winner = orangeZone === violetZone ? (Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet") : orangeZone > violetZone ? "orange" : "violet";
-    } else winner = Math.abs(orangePct - bluePct) < 0.004 ? "tie" : orangePct > bluePct ? "orange" : "violet";
+      lives = { orange: o, violet: v, wipeout: o === 0 || v === 0 };
+      winner = o === v ? "tie" : o > v ? "orange" : "violet";
+    } else if (gameMode === "zone") {
+      // Control points first, then who holds more of the zone at the whistle, then total turf.
+      zone = { orange: Math.floor(zonePts.orange), violet: Math.floor(zonePts.violet), knockout: zoneKO };
+      const lead = zonePts.orange - zonePts.violet;
+      const share = zoneShareO - zoneShareV;
+      winner = Math.abs(lead) >= 0.05 ? (lead > 0 ? "orange" : "violet") : Math.abs(share) >= 0.004 ? (share > 0 ? "orange" : "violet") : byTurf();
+    } else winner = byTurf();
 
+    // Let the sky clear for the end shot.
+    worldEvent = "none";
+    worldEventT = 0;
     endT = 0;
     const me = actors[0];
     if (!me.alive) respawn(me);
@@ -2747,9 +2966,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     endFromY = camPos.y - me.y;
     const p = actors[0];
     const board = buildBoard();
-    const res: NonNullable<HudSnap["result"]> = { winner, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths, points: board[0].points, board };
+    const res: MatchResult = { winner, mode: gameMode, orange: orangePct, blue: bluePct, splats: p.splats, deaths: p.deaths, points: board[0].points, board, zone, lives };
     result = res;
-    setBanner(winner === "orange" ? "زېمىن بىزنىڭ!" : winner === "violet" ? "زېمىن قولدىن كەتتى" : "تەڭ-تەڭ");
+    const lines =
+      gameMode === "zone"
+        ? zoneKO
+          ? ["نوكاۋت!", "نوكاۋت بولدۇق"]
+          : ["مەركەز بىزنىڭ!", "مەركەز قولدىن كەتتى"]
+        : gameMode === "survival"
+          ? ["بىز ھايات قالدۇق!", "ئەترىتىمىز يېڭىلدى"]
+          : ["زېمىن بىزنىڭ!", "زېمىن قولدىن كەتتى"];
+    setBanner(winner === "orange" ? lines[0] : winner === "violet" ? lines[1] : "تەڭ-تەڭ");
     audio.setTempo(false);
     audio.fanfare(winner === "orange" ? 1 : winner === "violet" ? -1 : 0);
     document.exitPointerLock?.();
@@ -2808,6 +3035,18 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     mode = "play";
     orangePct = 0;
     bluePct = 0;
+    eventClock = 0;
+    worldEvent = "none";
+    worldEventT = 0;
+    stormK = 0;
+    zonePts.orange = 0;
+    zonePts.violet = 0;
+    zoneShareO = 0;
+    zoneShareV = 0;
+    zoneHolder = 0;
+    zoneKO = false;
+    wipeT = 0;
+    watchIdx = -1;
     resetWorld();
     const p = actors[0];
     if (p.char !== cfg.character) {
@@ -2827,7 +3066,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       botPaths.delete(a);
       a.splats = 0;
       a.deaths = 0;
-      a.lives = bridge.config.current.gameMode === "survival" ? 3 : 99;
+      a.lives = cfg.gameMode === "survival" ? SURVIVAL_LIVES : 99;
       a.painted = 0;
       a.alive = true;
       a.ink = 100;
@@ -2887,6 +3126,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function goOrbit() {
     audio.setTempo(false);
+    worldEvent = "none";
     mode = "orbit";
     phase = "menu";
     paused = false;
@@ -2917,11 +3157,13 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       deaths: a.deaths,
       isPlayer: a.isPlayer,
       alive: a.alive,
+      lives: a.lives,
     }));
   }
 
   function publish(force = false) {
     const p = actors[0];
+    const gameMode = bridge.config.current.gameMode;
     const snap: HudSnap = {
       phase: mode === "play" ? (countdown > 0 && phase !== "ended" ? "countdown" : phase) : "menu",
       paused,
@@ -2936,7 +3178,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       weapon: p?.weapon ?? "spritzer",
       sub: p?.sub ?? "pop-bomb",
       specialId: p?.specialId ?? "tempest",
-      respawn: p && !p.alive ? Math.max(0, p.respawn) : 0,
+      respawn: p && !p.alive && !isOut(p) ? Math.max(0, p.respawn) : 0,
       countdown: phase === "ended" ? 0 : Math.max(0, countdown),
       locked,
       feed: feed.slice(0, 4),
@@ -2946,8 +3188,40 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       hit: hitMark,
       kill: killMark,
       board: mode === "play" ? buildBoard() : [],
+      mode: gameMode,
+      zone:
+        gameMode === "zone"
+          ? {
+              orange: zonePts.orange,
+              violet: zonePts.violet,
+              orangeShare: zoneShareO,
+              violetShare: zoneShareV,
+              holder: zoneHolder === 1 ? "orange" : zoneHolder === 2 ? "violet" : null,
+            }
+          : null,
+      survival: gameMode === "survival" && p ? survivalSnap(p) : null,
+      event: worldEvent !== "none" && phase === "live" ? { kind: worldEvent, left: worldEventT } : null,
     };
     if (force || mode === "play") bridge.onHud(snap);
+  }
+
+  function survivalSnap(p: Actor): NonNullable<HudSnap["survival"]> {
+    let orange = 0;
+    let violet = 0;
+    let orangeUp = 0;
+    let violetUp = 0;
+    for (const a of actors) {
+      if (a.team === 1) {
+        orange += a.lives;
+        if (a.lives > 0) orangeUp++;
+      } else {
+        violet += a.lives;
+        if (a.lives > 0) violetUp++;
+      }
+    }
+    const out = isOut(p);
+    const watched = out && watchIdx >= 0 ? actors[watchIdx] : null;
+    return { orange, violet, orangeUp, violetUp, perFighter: SURVIVAL_LIVES, mine: p.lives, out, watching: watched ? watched.name : "" };
   }
 
   function drawMini() {
@@ -2969,6 +3243,20 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       g.lineWidth = 1;
       for (const b of solids) if (b.maxY > 1.5 && b.maxX - b.minX > 2 && b.maxZ - b.minZ > 2)
         g.strokeRect((b.minX - MAP.minX) / MAP.w * w, (1 - (b.maxZ - MAP.minZ) / MAP.d) * h, (b.maxX - b.minX) / MAP.w * w, (b.maxZ - b.minZ) / MAP.d * h);
+    }
+    if (mode === "play" && bridge.config.current.gameMode === "zone") {
+      const x0 = ((ZONE.minX - MAP.minX) / MAP.w) * w;
+      const y0 = (1 - (ZONE.maxZ - MAP.minZ) / MAP.d) * h;
+      const zw = ((ZONE.maxX - ZONE.minX) / MAP.w) * w;
+      const zh = ((ZONE.maxZ - ZONE.minZ) / MAP.d) * h;
+      const tint = zoneHolder === 1 ? "255,106,26" : zoneHolder === 2 ? "91,77,255" : "244,247,251";
+      g.fillStyle = `rgba(${tint},0.14)`;
+      g.fillRect(x0, y0, zw, zh);
+      g.setLineDash([5, 3]);
+      g.lineWidth = 2;
+      g.strokeStyle = `rgb(${tint})`;
+      g.strokeRect(x0, y0, zw, zh);
+      g.setLineDash([]);
     }
     const dot = (x: number, z: number, color: string, rad: number) => {
       const u = (x - MAP.minX) / MAP.w;
@@ -3002,7 +3290,37 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     }
   }
 
+  /** Blends fog and sky toward sand while a sandstorm blows; the ground shader gets the same fog. */
+  function applyWeather(dt: number) {
+    const want = worldEvent === "sandstorm" && mode === "play" ? 1 : 0;
+    stormK += (want - stormK) * (1 - Math.exp(-1.6 * dt));
+    if (Math.abs(want - stormK) < 0.002) stormK = want;
+    const fog = scene.fog as THREE.Fog;
+    fog.near = 42 - 30 * stormK;
+    fog.far = 110 - 64 * stormK;
+    fogCol.copy(baseFog).lerp(SAND_FOG, stormK);
+    fog.color.copy(fogCol);
+    inkMat.uniforms.fogNear.value = fog.near;
+    inkMat.uniforms.fogFar.value = fog.far;
+    skyCol.copy(baseSky).lerp(SAND_FOG, stormK * 0.85);
+    (scene.background as THREE.Color).copy(skyCol);
+    renderer.setClearColor(skyCol, 1);
+  }
+
   function syncVisuals(dt: number) {
+    applyWeather(dt);
+    const showZone = mode === "play" && bridge.config.current.gameMode === "zone";
+    zoneMarker.visible = showZone;
+    inkMat.uniforms.zoneOn.value = showZone ? 1 : 0;
+    if (showZone) {
+      const tint = zoneHolder === 1 ? 0xff6a1a : zoneHolder === 2 ? 0x5b4dff : 0xf4f7fb;
+      zoneCurtainMat.color.set(tint);
+      (inkMat.uniforms.zoneTint.value as THREE.Color).set(tint);
+      // Pulse while the zone is up for grabs, steady once a team holds it.
+      const pulse = zoneHolder ? 0.5 : 0.5 + 0.5 * Math.sin(performance.now() * 0.006);
+      inkMat.uniforms.zonePulse.value = pulse;
+      zoneCurtainMat.opacity = 0.5 + pulse * 0.3;
+    }
     const t = performance.now() * 0.001;
     waterTime.value = t;
     for (const m of waterMeshes) m.position.y = 0.07 + Math.sin(t * 1.6) * 0.02;
@@ -3264,18 +3582,14 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         eventClock += dt;
         worldEventT = Math.max(0, worldEventT - dt);
         if (worldEventT <= 0 && worldEvent !== "none") {
+          setBanner(worldEvent === "sandstorm" ? "ئاسمان ئېچىلدى" : "بايرام ئاخىرلاشتى");
           worldEvent = "none";
-          (scene.fog as THREE.Fog).near = 42;
-          (scene.fog as THREE.Fog).far = 110;
-          setBanner("ئاسمان ئېچىلدى");
         }
         if (worldEvent === "none" && eventClock > 42) {
           eventClock = 0;
           if (level.id === "oasis" && rand() > 0.35) {
             worldEvent = "sandstorm";
             worldEventT = 18;
-            (scene.fog as THREE.Fog).near = 12;
-            (scene.fog as THREE.Fog).far = 46;
             setBanner("قۇم بورىنى!");
           } else {
             worldEvent = "festival";
@@ -3322,12 +3636,20 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         scoreAcc += dt;
         if (scoreAcc > 0.35) {
           scoreAcc = 0;
-    eventClock = 0;
-    worldEvent = "none";
-    worldEventT = 0;
-    (scene.fog as THREE.Fog).near = 42;
-    (scene.fog as THREE.Fog).far = 110;
           recount();
+        }
+        // Mode rules last, so a knockout or wipeout ends the match after this step's updates.
+        const gameMode = bridge.config.current.gameMode;
+        if (gameMode === "zone" && countdown <= 0) updateZone(dt);
+        else if (gameMode === "survival" && countdown <= 0) {
+          if (wipeT > 0) {
+            wipeT -= dt;
+            if (wipeT <= 0) endMatch();
+          } else if (teamLives(1) === 0 || teamLives(2) === 0) {
+            // A short beat so the final splat lands before the whistle.
+            wipeT = 1.2;
+            setBanner(teamLives(2) === 0 ? "رەقىب ئەترىتى تۈگىتىلدى!" : "ئەترىتىمىز يېڭىلدى");
+          }
         }
       }
     }
@@ -3363,13 +3685,34 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const lookWant = new THREE.Vector3();
   let camInit = false;
 
+  /** Survival: once the player is out, follow a teammate who is still standing. */
+  function camSubject(): Actor {
+    const me = actors[0];
+    if (phase === "ended" || !isOut(me)) {
+      watchIdx = -1;
+      return me;
+    }
+    const cur = watchIdx >= 0 ? actors[watchIdx] : null;
+    if (!cur || !cur.alive) {
+      for (let k = 1; k <= actors.length; k++) {
+        const i = (Math.max(0, watchIdx) + k) % actors.length;
+        const o = actors[i];
+        if (!o.isPlayer && o.team === me.team && o.alive) {
+          watchIdx = i;
+          break;
+        }
+      }
+    }
+    return watchIdx >= 0 ? actors[watchIdx] : me;
+  }
+
   /** Follows the player with gentle easing; after the whistle it swings round to face them. */
   function updateCamera(dt: number) {
     if (mode !== "play") {
       camInit = false;
       return;
     }
-    const a = actors[0];
+    const a = camSubject();
     const f = yawForward(a.yaw);
     const r = yawRight(a.yaw);
     const ended = phase === "ended";
@@ -3394,8 +3737,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       return;
     } else {
       const dist = a.swimming ? 3.6 : 4.6;
-      const cp = Math.cos(a.pitch);
-      const sp = Math.sin(a.pitch);
+      // Bots do not aim the camera, so spectating uses a fixed, slightly raised pitch.
+      const pitch = a.isPlayer ? a.pitch : 0.24;
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
       const headY = a.y + (a.swimming ? 0.7 : 1.35);
       let cx = a.x - f.x * dist * cp + r.x * 0.3;
       let cy = headY + dist * sp * 0.75 + 0.25;
@@ -3418,8 +3763,10 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       camLook.copy(lookWant);
       camInit = true;
     } else {
-      camPos.lerp(camWant, 1 - Math.exp(-(ended ? 3 : 14) * dt));
-      camLook.lerp(lookWant, 1 - Math.exp(-(ended ? 4 : 24) * dt));
+      // Spectating a bot: follow more loosely, since bots turn far more abruptly than a player's mouse.
+      const loose = !a.isPlayer;
+      camPos.lerp(camWant, 1 - Math.exp(-(ended ? 3 : loose ? 5 : 14) * dt));
+      camLook.lerp(lookWant, 1 - Math.exp(-(ended ? 4 : loose ? 7 : 24) * dt));
     }
     shake = Math.max(0, shake * Math.exp(-3.5 * dt));
     camera.position.set(camPos.x + (rand() - 0.5) * shake * 0.28, camPos.y + (rand() - 0.5) * shake * 0.2, camPos.z);

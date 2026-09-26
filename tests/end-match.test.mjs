@@ -16,17 +16,16 @@ visit(ast);
 assert.ok(fn);
 const code = ts.transpileModule(fn.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
-function check(name, { mode = 'turf', orange = 0.6, violet = 0.2, alive = true, lives = 2, enemyLives = 2, zone = 0, winner }) {
+function check(name, { mode = 'turf', orange = 0.6, violet = 0.2, alive = true, lives = 2, enemyLives = 2, zoneShare = [0, 0], points = [0, 0], ko = false, winner, expect }) {
   test(name, () => {
     const player = { team: 1, lives, alive, x: 0, y: 0, z: 0, yaw: 0, splats: 4, deaths: 2, swimming: true, climbing: true, spT: 0.5, invuln: 1 };
     let reports = 0;
     let published = 0;
-    const grid = new Uint8Array(120 * 152);
-    if (zone) grid[76 * 120 + 60] = zone;
     const ctx = vm.createContext({
       phase: 'live', paused: true, orangePct: orange, bluePct: violet,
       actors: [player, { team: 2, lives: enemyLives, alive: true }],
-      GW: 120, GH: 152, grid, result: null, resultSent: false,
+      zonePts: { orange: points[0], violet: points[1] }, zoneShareO: zoneShare[0], zoneShareV: zoneShare[1], zoneKO: ko,
+      worldEvent: 'sandstorm', worldEventT: 5, result: null, resultSent: false,
       endT: 10, endAng: 0, endFromAng: 0, endFromDist: 0, endFromY: 0,
       camPos: { x: 2, y: 3, z: 4 },
       recount() {}, castWorld() { return null; },
@@ -39,6 +38,9 @@ function check(name, { mode = 'turf', orange = 0.6, violet = 0.2, alive = true, 
     });
     vm.runInContext(code + '\nendMatch(); endMatch();', ctx);
     assert.equal(ctx.result.winner, winner, name);
+    assert.equal(ctx.result.mode, mode);
+    assert.equal(ctx.worldEvent, 'none');
+    expect?.(ctx.result);
     assert.equal(ctx.result.points, 123);
     assert.equal(ctx.result.splats, 4);
     assert.equal(ctx.result.deaths, 2);
@@ -56,10 +58,20 @@ function check(name, { mode = 'turf', orange = 0.6, violet = 0.2, alive = true, 
   });
 }
 
-check('turf winner and celebration', { winner: 'orange' });
+check('turf winner and celebration', { winner: 'orange', expect: (r) => assert.deepEqual([r.zone, r.lives], [null, null]) });
 check('turf tie tolerance', { orange: 0.4, violet: 0.402, winner: 'tie' });
-check('zone control overrides total turf', { mode: 'zone', zone: 2, winner: 'violet' });
+check('zone share at the whistle breaks a control-point tie', { mode: 'zone', zoneShare: [0, 0.01], winner: 'violet' });
 check('tied zone uses turf tiebreaker', { mode: 'zone', winner: 'orange' });
+check('zone control points beat zone share and turf', {
+  mode: 'zone', points: [10.4, 40.9], zoneShare: [0.6, 0.1], winner: 'violet',
+  expect: (r) => assert.deepEqual({ ...r.zone }, { orange: 10, violet: 40, knockout: false }),
+});
+check('zone knockout is reported', { mode: 'zone', points: [100, 20], ko: true, orange: 0.1, violet: 0.5, winner: 'orange', expect: (r) => assert.equal(r.zone.knockout, true) });
 check('survival winner ignores turf', { mode: 'survival', lives: 1, enemyLives: 2, winner: 'violet' });
-check('dead player cannot turn a survival loss into a tie during celebration', { mode: 'survival', alive: false, winner: 'violet' });
-check('dead player cannot turn a survival tie into a win during celebration', { mode: 'survival', alive: false, lives: 2, enemyLives: 1, winner: 'tie' });
+check('standing fighters get no bonus life in survival', { mode: 'survival', lives: 2, enemyLives: 2, winner: 'tie' });
+check('celebration respawn cannot turn a survival loss into a tie', { mode: 'survival', alive: false, lives: 1, enemyLives: 2, winner: 'violet' });
+check('dead player keeps the lives they have left', { mode: 'survival', alive: false, lives: 2, enemyLives: 1, winner: 'orange' });
+check('survival wipeout is reported', {
+  mode: 'survival', alive: false, lives: 0, enemyLives: 3, winner: 'violet',
+  expect: (r) => assert.deepEqual({ ...r.lives }, { orange: 0, violet: 3, wipeout: true }),
+});

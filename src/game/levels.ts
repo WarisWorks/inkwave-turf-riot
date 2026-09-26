@@ -9,6 +9,9 @@ export type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 /** Playable area shared by every level (walls sit just outside it). */
 export const MAP = { minX: -30, minZ: -38, w: 60, d: 76 };
 
+/** Zone mode: the central rectangle both teams fight to hold. Snapped to the 0.5 m paint grid. */
+export const ZONE: Rect = { minX: -13.5, maxX: 13.5, minZ: -12.5, maxZ: 12.5 };
+
 /**
  * Level building blocks. Boxes use a centre position.
  * `deco` pieces use a plain lit material so ground ink never tints them, and are not solid.

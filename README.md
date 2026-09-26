@@ -33,6 +33,20 @@ VITE_MATCH_LEN=75 npm run dev
 
 Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Burst, Ink Tempest, or Reef Rush.
 
+## Game modes
+
+Pick a mode under **جەڭ ئۇسۇلى** on the stage screen; the menu's Play button shows the current stage and mode.
+
+| Mode | Rules | HUD |
+|---|---|---|
+| زېمىن جېڭى · Turf | More inked ground at the whistle wins. | Turf % per team and a shared bar. |
+| مەركەزنى ئىگىلەش · Zone | The centre rectangle (`ZONE` in `src/game/levels.ts`) is marked on the ground, by a light curtain, on the minimap and on the stage previews. A team takes it by inking at least 50% of its paintable ground while leading by 12 points, and keeps it until its share drops below 36%. Holding it banks 100/60 control points per second; **100 is a knockout** (a full minute of control). Otherwise most points wins at the whistle, then zone share, then turf. Bots on painter/defender duty work the zone; attackers join whenever their team does not hold it. | Control points with a progress strip per team, the zone-share bar with its capture line, and who holds the centre. |
+| ئاخىرقى ئەترەت · Survival | Every fighter has 3 lives. A fighter who spends them all is out for the match. Wiping out the other team ends the match at once; otherwise more lives left at the whistle wins. | Team lives with one pip per fighter, your own hearts, a "N lives left" note while respawning, and a spectator card that follows a living teammate once you are out. The scoreboard adds a lives column. |
+
+Results name the mode, its headline score (turf %, control points or lives left), a knockout or wipeout note, and the coins earned. Coins are also shown on the player card.
+
+**Arena events**: every 42 s of play a festival wave charges everyone's special faster for 14 s. In Taklamakan a sandstorm can roll in instead for 18 s: fog and sky blend to sand (including the painted ground), and bots see only about two thirds as far. A chip under the clock names the event and counts it down.
+
 ## Movement, specials and animation (v1.4)
 
 - **Swim-climb walls**: shots that hit a wall leave team ink on it. Hold swim (Shift) and push into a wall carrying your team's ink to swim straight up it; near the ledge you vault over even if the last stretch is bare.
@@ -108,6 +122,7 @@ All in-game content is in Uyghur (سىياھ دولقۇنى — زېمىن جې�
 
 - **Font**: ALKATIP Basma, loaded via `@font-face` in `src/styles.css` and applied through the `.alkatip-basma` class on the app root. The engine calls `document.fonts.load()` before redrawing name tags, since canvas text never triggers a web-font download on its own.
 - **Direction**: the document is `lang="ug" dir="rtl"`. Layout uses logical utilities (`ms-*`, `ps-*`, `text-start/end`) so the HUD score bar and cards mirror correctly.
+- **Lobby (main menu)**: a Splatoon-inspired lobby built from original shapes. Play, Stage and Loadout are tilted, hanging signs (`LobbySign`: halftone face, splat badge, caption band, idle sway on Play); Settings, How to play and Credits are dark slanted tags (`LobbyTag`). The player card is a dark status panel with level, a striped XP bar, a zero-padded coin counter, an Etles-ikat nameplate (the name is editable in place), Mode and Stage rows with quick-change tags and a map thumbnail, and four stats. Styles live under `.lobby-*`, `.sign-*` and `.status-*` in `src/styles.css`; the lime/ink/slate tokens are in `@theme`.
 - **Ink buttons**: `InkButton` / `InkOption` in `src/components/InkWaveApp.tsx`, styled by the `.ink-*` classes in `src/styles.css`. Blob-shaped faces with a sloshing ink wave, bulb drips off the ledge, hover splatter, and a splat check badge on selected cards. Motion is disabled under `prefers-reduced-motion`.
 
 ## GLB integration skill
