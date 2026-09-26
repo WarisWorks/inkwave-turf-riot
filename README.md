@@ -122,6 +122,7 @@ All in-game content is in Uyghur (سىياھ دولقۇنى — زېمىن جې�
 
 - **Font**: ALKATIP Basma, loaded via `@font-face` in `src/styles.css` and applied through the `.alkatip-basma` class on the app root. The engine calls `document.fonts.load()` before redrawing name tags, since canvas text never triggers a web-font download on its own.
 - **Direction**: the document is `lang="ug" dir="rtl"`. Layout uses logical utilities (`ms-*`, `ps-*`, `text-start/end`) so the HUD score bar and cards mirror correctly.
+- **Lobby (main menu)**: a Splatoon-inspired lobby built from original shapes. Play, Stage and Loadout are tilted, hanging signs (`LobbySign`: halftone face, splat badge, caption band, idle sway on Play); Settings, How to play and Credits are dark slanted tags (`LobbyTag`). The player card is a dark status panel with level, a striped XP bar, a zero-padded coin counter, an Etles-ikat nameplate (the name is editable in place), Mode and Stage rows with quick-change tags and a map thumbnail, and four stats. Styles live under `.lobby-*`, `.sign-*` and `.status-*` in `src/styles.css`; the lime/ink/slate tokens are in `@theme`.
 - **Ink buttons**: `InkButton` / `InkOption` in `src/components/InkWaveApp.tsx`, styled by the `.ink-*` classes in `src/styles.css`. Blob-shaped faces with a sloshing ink wave, bulb drips off the ledge, hover splatter, and a splat check badge on selected cards. Motion is disabled under `prefers-reduced-motion`.
 
 ## GLB integration skill

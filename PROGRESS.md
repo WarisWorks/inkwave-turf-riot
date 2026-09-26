@@ -6,6 +6,7 @@ All four environments are complete. Zone and Survival now play as their own mode
 The reusable `add-glb-to-game` skill is documented in `skills/` and installed in the user's Codex skills directory.
 
 ## Completed
+- Restyled the main menu as a Splatoon-inspired lobby: tilted hanging signs for Play/Stage/Loadout, dark slanted tags for the rest, and a dark status card (level, striped XP bar, coin counter, Etles-ikat nameplate, Mode/Stage rows with map thumbnail, stats). Checked at 1000×600 and 390×844.
 - Fixed arena events never firing: the 0.35 s score tick reset the event clock. Events now reset at match start, clear at the whistle and menu, and the sandstorm eases fog/sky toward sand, including the painted-ground shader's fog.
 - Zone mode: live capture with hysteresis, 100-point knockout, ground border band + light curtain + minimap/stage-preview outline, bot zone duty, and a HUD with control points, zone share and holder.
 - Survival mode: lives-left scoring (no bonus for standing fighters), eliminated fighters stay down, a wiped-out team ends the match, lives HUD/hearts/pips, a spectator camera for an eliminated player, and a lives column on the scoreboard.
@@ -79,6 +80,26 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 3. Tune Zone capture thresholds and Survival lives from real playtests; consider character draw-call batching if mobile profiling warrants it.
 
 ## Session History
+
+### 2026-09-26 — Splatoon-style lobby
+
+**Goal**
+Make the menu cards look like a Splatoon lobby (user-supplied Splatoon 3 references), keeping Uyghur text, ALKATIP and RTL.
+
+**Completed**
+- Added `LobbySign` and `LobbyTag`, replaced the menu panel and player card, and added lime/ink/slate tokens and `.lobby-*`, `.sign-*`, `.status-*` styles, with reduced-motion support.
+- The Play sign shows stage, mode and team size; Stage and Loadout signs show the current choice. The status card's tags open How to play and Stage select. The menu version badge moved into the card.
+- `tsc -b`, `npm run build` and `npm test` (68) pass; desktop 1000×600 and phone 390×844 screenshots reviewed.
+
+**Files Changed**
+- `src/components/InkWaveApp.tsx`, `src/styles.css`, `README.md`, `PROGRESS.md`
+
+**Important Notes**
+- Inspired by the reference look only: every shape is original CSS/SVG and no Nintendo assets or logos are used.
+- The sandbox blocks the ALKATIP font host, so screenshots used the fallback font; outlined titles use `paint-order: stroke fill` so joined Uyghur letters keep clean strokes.
+
+**Next**
+- Review the lobby with the real ALKATIP font on a phone.
 
 ### 2026-09-26 — Game-mode and HUD review
 
