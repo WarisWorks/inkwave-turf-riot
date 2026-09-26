@@ -71,6 +71,104 @@ function mirror(p: Prim): Prim {
 const sym = (ps: Prim[]) => [...ps, ...ps.map(mirror)];
 const flip = (spawns: [number, number][]) => spawns.map(([x, z]) => [-x, -z] as [number, number]);
 
+
+
+
+/** Elevated links and market pockets make the old city read as one connected combat space. */
+function roofBridge(x: number, z: number, w: number, alongX = true): Prim[] {
+  return alongX
+    ? [box(x, 3.05, z, w, 0.32, 1.8, 0x8b5739), box(x, 3.55, z - 0.8, w, 0.65, 0.16, 0x245f73, true), box(x, 3.55, z + 0.8, w, 0.65, 0.16, 0x245f73, true)]
+    : [box(x, 3.05, z, 1.8, 0.32, w, 0x8b5739), box(x - 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true), box(x + 0.8, 3.55, z, 0.16, 0.65, w, 0x245f73, true)];
+}
+function marketCluster(x: number, z: number): Prim[] {
+  return [
+    box(x - 2.1, 0.7, z, 3.2, 1.4, 2.2, 0x9a613b),
+    box(x - 2.1, 1.62, z, 3.8, 0.14, 2.8, 0xc8102e, true),
+    box(x + 2.0, 0.65, z + 0.4, 3.0, 1.3, 2.0, 0x9a613b),
+    box(x + 2.0, 1.52, z + 0.4, 3.6, 0.14, 2.6, 0x168f86, true),
+    box(x - 2.8, 0.38, z - 1.7, 0.9, 0.76, 0.9, 0xe0a15a),
+    box(x + 2.7, 0.4, z - 1.5, 1.0, 0.8, 1.0, 0xb5652b),
+  ];
+}
+function rooftopPavilion(x: number, z: number): Prim[] {
+  return [
+    box(x - 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x + 2.2, 1.45, z - 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x - 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x + 2.2, 1.45, z + 1.7, 0.24, 2.9, 0.24, 0x6b4226, true),
+    box(x, 3.0, z, 5.1, 0.18, 4.1, 0x168f86, true),
+    box(x, 3.22, z, 5.5, 0.16, 4.5, 0xf2c230, true),
+  ];
+}
+
+/** Dense playable old-city block: low roofs are reachable and the gaps become combat alleys. */
+function oldCityBlock(x: number, z: number, flipZ = false): Prim[] {
+  const dir = flipZ ? -1 : 1;
+  return [
+    box(x, 1.35, z, 7.5, 2.7, 5.5, 0xd39a68),
+    box(x, 2.82, z, 8.0, 0.22, 6.0, 0x8f5738, true),
+    stairs(x + 4.4, z + dir * 1.8, dir as 1 | -1, 3.2, 2.7, 5.2, 6, 0xc78a5a),
+    box(x - 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x + 2.4, 1.65, z - dir * 2.9, 1.5, 0.18, 1.0, 0x245f73, true),
+    box(x - 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
+    box(x + 3.45, 3.55, z, 0.22, 1.25, 5.7, 0x6b4226, true),
+    box(x, 3.95, z, 7.2, 0.16, 5.3, 0x6b4226, true),
+  ];
+}
+/** Bazaar arcade used as actual cover/chokepoint rather than background dressing. */
+function bazaarArcade(x: number, z: number): Prim[] {
+  const p: Prim[] = [box(x, 3.4, z, 10, 0.35, 3.4, 0xc98250, true)];
+  for (let i = -2; i <= 2; i++) {
+    p.push(box(x + i * 2.2, 1.55, z, 0.48, 3.1, 0.48, 0xb9784b));
+    p.push({ t: "dome", x: x + i * 2.2, y: 3.08, z, r: 0.55, c: 0x168f86 });
+  }
+  return p;
+}
+
+/** Decorative Uyghur architectural vocabulary built from cheap primitives.
+ * These stay mostly at the arena edges so silhouettes become culturally distinct
+ * without closing important combat lanes.
+ */
+function uyghurGate(x: number, z: number, c = 0xd59a63, accent = 0x168f86): Prim[] {
+  return [
+    box(x - 2.8, 2.2, z, 1.1, 4.4, 1.2, c),
+    box(x + 2.8, 2.2, z, 1.1, 4.4, 1.2, c),
+    box(x, 4.15, z, 6.7, 0.7, 1.35, accent),
+    box(x, 4.7, z, 7.2, 0.18, 1.55, 0xf0d29a, true),
+    { t: "dome", x: x - 2.8, y: 4.4, z, r: 0.62, c: accent },
+    { t: "dome", x: x + 2.8, y: 4.4, z, r: 0.62, c: accent },
+  ];
+}
+function minaret(x: number, z: number, c = 0xc88954, accent = 0x168f86): Prim[] {
+  return [
+    box(x, 2.8, z, 2.1, 5.6, 2.1, c),
+    box(x, 5.75, z, 2.7, 0.35, 2.7, accent),
+    { t: "dome", x, y: 6.0, z, r: 1.18, c: accent },
+    box(x, 7.0, z, 0.22, 1.7, 0.22, 0x6b4226, true),
+  ];
+}
+function courtyardFacade(x: number, z: number, w = 10, c = 0xd29a67): Prim[] {
+  const parts: Prim[] = [
+    box(x, 1.8, z, w, 3.6, 1.1, c),
+    box(x, 3.75, z, w + 0.5, 0.28, 1.35, 0x8d4f35, true),
+  ];
+  for (let i = -2; i <= 2; i++) {
+    parts.push(box(x + i * (w / 6), 2.05, z - 0.62, 0.42, 1.35, 0.18, 0x245f73, true));
+    parts.push({ t: "dome", x: x + i * (w / 6), y: 2.72, z: z - 0.68, r: 0.34, c: 0x245f73 });
+  }
+  return parts;
+}
+function grapeHouse(x: number, z: number): Prim[] {
+  const parts: Prim[] = [
+    box(x, 2.2, z, 7.5, 4.4, 6.5, 0xb87343),
+    box(x, 4.55, z, 8.0, 0.28, 7.0, 0x8d5534, true),
+  ];
+  for (let ix = -2; ix <= 2; ix++) for (let iy = 0; iy < 3; iy++)
+    parts.push(box(x + ix * 1.15, 1.1 + iy * 1.05, z - 3.32, 0.5, 0.42, 0.12, 0x633b29, true));
+  return parts;
+}
+
 /* ── پورت · Harbor (the original map) ─────────────────────────────── */
 
 const harborCrates: [number, number, number, number, number][] = [
@@ -117,6 +215,11 @@ const HARBOR: LevelDef = {
     [-8, 28],
   ],
   prims: [
+    // Even the harbor carries Uyghur old-town architecture around its perimeter.
+    ...uyghurGate(0, -35, 0xd9a06c, 0x237d82),
+    ...uyghurGate(0, 35, 0xd9a06c, 0x237d82),
+    ...courtyardFacade(-22, -36, 10, 0xd5a171),
+    ...courtyardFacade(22, 36, 10, 0xd5a171),
     box(-20, 1.15, -27, 14, 2.3, 14, 0xffd7b4),
     stairs(-20, -20, 1, 10, 2.3, 6.6, 4, 0xe7d3c0),
     box(20.5, 2.1, -25.5, 13, 4.2, 15, 0xffe3c8),
@@ -188,6 +291,37 @@ const BAZAAR: LevelDef = {
     [8, -29],
   ]),
   prims: [
+    // Strong Kashgar silhouette: ceremonial gates, courtyard façades and edge minarets.
+    ...uyghurGate(0, -34, 0xd59a63, TILE),
+    ...uyghurGate(0, 34, 0xd59a63, TILE),
+    ...courtyardFacade(-20, -36, 12, 0xd49a67),
+    ...courtyardFacade(20, 36, 12, 0xd49a67),
+    ...minaret(-27.5, -31, BRICK, TILE),
+    ...minaret(27.5, 31, BRICK, TILE),
+    // Dense playable old-city fabric: roofs, stairs and alleys are part of the fight.
+    ...oldCityBlock(-19, -24),
+    ...oldCityBlock(18, -23),
+    ...oldCityBlock(-18, 22, true),
+    ...oldCityBlock(19, 24, true),
+    ...oldCityBlock(-22, 9),
+    ...oldCityBlock(22, -8, true),
+    ...bazaarArcade(0, -25),
+    ...bazaarArcade(0, 25),
+    // Rooftop circulation and dense street life: the architecture IS the arena.
+    ...roofBridge(-9, -23, 9, true),
+    ...roofBridge(9, 23, 9, true),
+    ...roofBridge(-20, 15, 9, false),
+    ...roofBridge(20, -15, 9, false),
+    ...rooftopPavilion(-18, -23),
+    ...rooftopPavilion(18, 23),
+    ...marketCluster(-8, -17),
+    ...marketCluster(9, 16),
+    ...marketCluster(13, -6),
+    ...marketCluster(-13, 6),
+    box(-9, 1.0, -5, 8, 2.0, 1.0, 0xd6a06d),
+    box(10, 0.8, 6, 7, 1.6, 1.0, 0xc98b5a),
+    box(-5, 1.15, 13, 1.0, 2.3, 7, 0xd6a06d),
+    box(6, 0.95, -13, 1.0, 1.9, 7, 0xc98b5a),
     // Central fountain: a tiled rim you have to hop over, and a domed spout.
     box(0, 0.45, -3.6, 8, 0.9, 0.8, TILE),
     box(0, 0.45, 3.6, 8, 0.9, 0.8, TILE),
@@ -207,7 +341,7 @@ const BAZAAR: LevelDef = {
       box(-4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
       box(4.5, 1.8, -20, 1, 3.6, 1, 0xf0d9a8),
       box(0, 3.9, -20, 10, 0.6, 1.1, TILE),
-      // Market stalls with striped awnings.
+      // Market stalls with striped awnings. These fill the playable streets, not only the perimeter.
       ...stall(-11, -24, 0),
       ...stall(-11, -18, 1),
       ...stall(11, -24, 2),
@@ -255,6 +389,13 @@ const OASIS: LevelDef = {
     [7, -30],
   ]),
   prims: [
+    // Oasis settlement: mud-brick gates and watchtowers frame the desert arena.
+    ...uyghurGate(0, -34, 0xc9945c, 0x2b8c7f),
+    ...uyghurGate(0, 34, 0xc9945c, 0x2b8c7f),
+    ...courtyardFacade(-18, -36, 11, 0xc18a58),
+    ...courtyardFacade(18, 36, 11, 0xc18a58),
+    ...minaret(-27, 30, 0xb77d4d, 0x2b8c7f),
+    ...minaret(27, -30, 0xb77d4d, 0x2b8c7f),
     ...sym([
       // Palms ringing the pond.
       palm(-8, -5.5),
@@ -349,6 +490,13 @@ const VINEYARD: LevelDef = {
     [8, -29],
   ]),
   prims: [
+    // Turpan skyline: grape-drying houses and traditional courtyard entrances.
+    ...grapeHouse(-24, -31),
+    ...grapeHouse(24, 31),
+    ...grapeHouse(24, -31),
+    ...grapeHouse(-24, 31),
+    ...uyghurGate(0, -34, 0xb87343, 0x8f5b37),
+    ...uyghurGate(0, 34, 0xb87343, 0x8f5b37),
     // Footbridges over the karez, and a two-step supa pavilion in the middle.
     ...[-20, -10, 10, 20].map((x) => box(x, 0.225, 0, 4, 0.45, 5.8, 0x9b6b43)),
     box(0, 0.225, 0, 9, 0.45, 7.4, 0x8a5530),

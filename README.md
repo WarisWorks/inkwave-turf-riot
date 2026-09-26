@@ -1,6 +1,6 @@
 # InkWave Turf Riot
 
-A desktop-first 4v4 harbor turf-war shooter. You and three Orange teammates paint the ground against four Violet bots. Whoever owns more turf when the 3-minute match ends wins.
+A desktop-first 6v6 ink shooter across four arenas. You and five Orange teammates face six Violet bots in Turf, Zone, or Survival mode. In Turf, whoever owns more ground when the 3-minute match ends wins.
 
 Built with React, Three.js, and Vite.
 
@@ -31,7 +31,7 @@ VITE_MATCH_LEN=75 npm run dev
 - **Esc** — pause
 - **Tab** (hold) — scoreboard
 
-Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Tempest or Reef Rush.
+Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Burst, Ink Tempest, or Reef Rush.
 
 ## Movement, specials and animation (v1.4)
 

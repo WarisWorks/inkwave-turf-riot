@@ -24,10 +24,11 @@ import {
 } from "lucide-react";
 import type { EngineApi } from "../game/engine";
 import { LEVEL_DEFS, MAP, waterRects } from "../game/levels";
-import { DEFAULT_SAVE, levelInfo, loadSave, matchXp, rankTitle, writeSave, type SaveData } from "../game/persist";
+import { DEFAULT_SAVE, levelInfo, loadSave, matchCoins, matchXp, rankTitle, writeSave, type SaveData } from "../game/persist";
 import {
   CHARACTERS,
   DIFFICULTIES,
+  GAME_MODES,
   LEVELS,
   characterById,
   levelById,
@@ -39,6 +40,7 @@ import {
   type BoardRow,
   type CharacterId,
   type Difficulty,
+  type GameMode,
   type HudSnap,
   type InputState,
   type LevelId,
@@ -52,9 +54,9 @@ import {
 type Screen = "menu" | "loadout" | "stage" | "settings" | "howto" | "credits" | "play";
 
 /** What the last match earned, shown on the results screen. */
-type Reward = { xp: number; record: boolean; levelUp: number };
+type Reward = { xp: number; coins: number; record: boolean; levelUp: number };
 
-const VERSION = "v1.4.0";
+const VERSION = "v2.0.0";
 
 function difficultyName(id: Difficulty) {
   return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";
@@ -160,6 +162,7 @@ export function InkWaveApp() {
     difficulty: DEFAULT_SAVE.difficulty,
     level: DEFAULT_SAVE.level,
     character: DEFAULT_SAVE.character,
+    gameMode: DEFAULT_SAVE.gameMode,
     input: inputRef.current,
   });
   const onHudRef = useRef<(h: HudSnap) => void>(() => {});
@@ -187,6 +190,7 @@ export function InkWaveApp() {
     difficulty: save.difficulty,
     level: save.level,
     character: save.character,
+    gameMode: save.gameMode,
     input: inputRef.current,
   };
   onHudRef.current = setHud;
@@ -233,18 +237,20 @@ export function InkWaveApp() {
         onResult: (r) => {
           const current = saveRef.current;
           const xp = matchXp(r);
+          const coins = matchCoins(r);
           const next = {
             ...current,
             matches: current.matches + 1,
             wins: current.wins + (r.winner === "orange" ? 1 : 0),
             splats: current.splats + r.splats,
             xp: current.xp + xp,
+            coins: current.coins + coins,
             best: Math.max(current.best, r.points),
           };
           writeSave(next);
           setSave(next);
           const level = levelInfo(next.xp).level;
-          setReward({ xp, record: r.points > current.best && r.points > 0, levelUp: level > levelInfo(current.xp).level ? level : 0 });
+          setReward({ xp, coins, record: r.points > current.best && r.points > 0, levelUp: level > levelInfo(current.xp).level ? level : 0 });
         },
         onApi: (api) => {
           apiRef.current = api;
@@ -311,6 +317,7 @@ export function InkWaveApp() {
             patch({ level });
             apiRef.current?.setLevel(level);
           }}
+          onMode={(gameMode) => patch({ gameMode })}
         />
       ) : null}
       {screen === "settings" ? <SettingsScreen save={save} onBack={() => setScreen("menu")} onChange={patch} /> : null}
@@ -650,7 +657,7 @@ function MapPreview({ id, className = "" }: { id: LevelId; className?: string })
   return <canvas ref={ref} width={120} height={152} className={className} aria-hidden />;
 }
 
-function StageScreen({ save, onBack, onLevel }: { save: SaveData; onBack: () => void; onLevel: (id: LevelId) => void }) {
+function StageScreen({ save, onBack, onLevel, onMode }: { save: SaveData; onBack: () => void; onLevel: (id: LevelId) => void; onMode: (id: GameMode) => void }) {
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto">
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 pb-12">
@@ -658,6 +665,17 @@ function StageScreen({ save, onBack, onLevel }: { save: SaveData; onBack: () => 
           <BackButton onBack={onBack} />
           <h2 className="font-display text-3xl">مەيدان تاللاش</h2>
         </div>
+        <section className="panel p-4">
+          <p className="mb-3 font-display text-xl text-sun">جەڭ ئۇسۇلى</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {GAME_MODES.map((m) => (
+              <InkOption key={m.id} selected={save.gameMode === m.id} className="flex min-h-28 flex-col justify-center p-3 text-center" onClick={() => onMode(m.id)}>
+                <span className="font-display text-lg text-orange">{m.name}</span>
+                <span className="mt-1 text-xs leading-ug text-muted">{m.blurb}</span>
+              </InkOption>
+            ))}
+          </div>
+        </section>
         <div className="grid gap-4 sm:grid-cols-2">
           {LEVELS.map((l) => (
             <InkOption key={l.id} selected={save.level === l.id} className="flex items-center gap-4 p-3" onClick={() => onLevel(l.id)}>

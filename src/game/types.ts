@@ -3,6 +3,8 @@ export type SubId = "pop-bomb" | "ink-beacon";
 export type SpecialId = "burst" | "tempest" | "reef-rush";
 export type Quality = "low" | "high";
 export type Difficulty = "easy" | "normal" | "hard";
+export type GameMode = "turf" | "zone" | "survival";
+export type BotRole = "attacker" | "painter" | "defender" | "hunter";
 export type LevelId = "harbor" | "bazaar" | "oasis" | "vineyard";
 export type CharacterId = "wave" | "doppa" | "braids" | "telpek" | "scarf" | "dutar";
 
@@ -30,6 +32,7 @@ export type LiveConfig = {
   difficulty: Difficulty;
   level: LevelId;
   character: CharacterId;
+  gameMode: GameMode;
   input: InputState;
 };
 
@@ -218,6 +221,12 @@ export const CHARACTERS: CharacterInfo[] = [
 export function characterById(id: CharacterId) {
   return CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
 }
+
+export const GAME_MODES: { id: GameMode; name: string; blurb: string }[] = [
+  { id: "turf", name: "زېمىن جېڭى", blurb: "مۇسابىقە ئاخىرلاشقاندا ئەڭ كۆپ زېمىننى بويىغان ئەترەت غەلىبە قىلىدۇ." },
+  { id: "zone", name: "مەركەزنى ئىگىلەش", blurb: "مەركىزىي رايوننى بوياپ، ئۇنى كونترول قىلىپ نومۇر توپلاڭ." },
+  { id: "survival", name: "ئاخىرقى ئەترەت", blurb: "ھەر بىر جەڭچىنىڭ چەكلىك قايتا تىرىلىش پۇرسىتى بار. ئەترىتىڭىزنى ساقلاپ قېلىڭ." },
+];
 
 export const DIFFICULTIES: { id: Difficulty; name: string }[] = [
   { id: "easy", name: "ئاسان" },
