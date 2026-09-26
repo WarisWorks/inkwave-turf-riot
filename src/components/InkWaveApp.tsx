@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 import {
   Bomb,
   Check,
@@ -6,6 +6,7 @@ import {
   Eye,
   Heart,
   PartyPopper,
+  Pencil,
   Target,
   Wind,
   CircleHelp,
@@ -348,10 +349,55 @@ export function InkWaveApp() {
 
       {playing && touchUi && hud && !hud.paused && hud.phase !== "ended" ? <TouchControls input={inputRef.current} /> : null}
 
-      {playing ? null : (
+      {playing || screen === "menu" ? null : (
         <p className="pointer-events-none absolute bottom-3 left-3 z-40 rounded-full bg-navy px-2 py-1 font-display text-xs text-foam">{VERSION}</p>
       )}
     </div>
+  );
+}
+
+type SignTone = "lime" | "orange" | "violet";
+
+/** Splatoon-style lobby sign: a tilted, hanging card with a halftone face, splat badge and caption band. */
+function LobbySign({
+  tone,
+  tilt = 0,
+  hero = false,
+  icon,
+  title,
+  caption,
+  className = "",
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone: SignTone; tilt?: number; hero?: boolean; icon: ReactNode; title: ReactNode; caption?: ReactNode }) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={`lobby-sign sign-${tone} ${hero ? "lobby-sign-hero" : ""} font-display ${className}`}
+      style={{ "--tilt": `${tilt}deg` } as CSSProperties}
+    >
+      <span className="sign-hanger" aria-hidden />
+      <span className="sign-badge" aria-hidden>
+        <span className="sign-badge-splat" />
+        {icon}
+      </span>
+      <span className="sign-title">{title}</span>
+      {caption ? <span className="sign-caption">{caption}</span> : null}
+    </button>
+  );
+}
+
+/** Dark slanted tag button (like a lobby "Rules" / "Menu" button). */
+function LobbyTag({ icon, small = false, className = "", children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: ReactNode; small?: boolean }) {
+  return (
+    <button type="button" {...rest} className={`lobby-tag ${small ? "lobby-tag-sm" : ""} font-display ${className}`}>
+      {icon ? (
+        <span className="lobby-tag-icon" aria-hidden>
+          {icon}
+        </span>
+      ) : null}
+      <span className="lobby-tag-label">{children}</span>
+    </button>
   );
 }
 
@@ -370,142 +416,135 @@ function Menu({
   onNavigate: (s: Screen) => void;
   onName: (name: string) => void;
 }) {
-  const buttons: { label: string; screen: Screen; icon: ReactNode }[] = [
-    { label: "قورال-جابدۇق", screen: "loadout", icon: <Shirt className="size-5" /> },
-    { label: "مەيدان تاللاش", screen: "stage", icon: <MapIcon className="size-5" /> },
-    { label: "تەڭشەك", screen: "settings", icon: <Settings className="size-5" /> },
-    { label: "ئويناش ئۇسۇلى", screen: "howto", icon: <CircleHelp className="size-5" /> },
-    { label: "ئويۇن ھەققىدە", screen: "credits", icon: <ScrollText className="size-5" /> },
-  ];
   const lv = levelInfo(save.xp);
+  const mode = GAME_MODES.find((m) => m.id === save.gameMode) ?? GAME_MODES[0];
+  const stage = levelById(save.level);
+  const stats: [string, number][] = [
+    ["غەلىبە", save.wins],
+    ["مۇسابىقە", save.matches],
+    ["چاچرىتىش", save.splats],
+    ["رېكورت", save.best],
+  ];
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-4 p-4 pb-10 md:flex-row md:items-center md:p-8">
-        <section className="panel flex w-full flex-col gap-4 p-5 md:max-w-md">
-          <span className="ikat-strip" aria-hidden />
-          <div className="flex items-center gap-3">
-            <span className="relative h-14 w-14 shrink-0" aria-hidden>
-              <span className="absolute inset-0 rounded-full bg-orange" />
-              <span className="absolute top-1 -right-1 h-7 w-7 rounded-full bg-violet" />
-              <span className="absolute -bottom-1 left-2 h-4 w-4 rounded-full bg-sun" />
-            </span>
-            <div>
-              <p className="font-display text-sm text-sun">رەڭلىك زېمىن تالىشىش جېڭى</p>
-              <h1 className="font-display text-4xl leading-[1.35] text-foam md:text-5xl">
-                سىياھ دولقۇنى
-                <br />
-                <span className="text-orange">زېمىن جېڭى</span>
-              </h1>
-            </div>
-          </div>
-          <p className="text-base leading-ug text-muted">
-            {(GAME_MODES.find((m) => m.id === save.gameMode) ?? GAME_MODES[0]).blurb}
-          </p>
-          <div className="flex flex-col gap-5 pb-4">
-            <InkButton
-              tone="orange"
-              className="ink-btn-hero h-16 justify-start ps-2 pe-4 text-2xl"
-              disabled={!ready}
-              aria-busy={!ready}
-              icon={<Play className="size-6" />}
-              onClick={onPlay}
-            >
-              {ready ? (
-                <>
-                  باشلاش
-                  <span className="ink-chip ms-auto">
-                    {levelById(save.level).name} · {GAME_MODES.find((m) => m.id === save.gameMode)?.name ?? GAME_MODES[0].name}
-                  </span>
-                </>
-              ) : (
-                <span className="text-lg">دولقۇن ئويغىنىۋاتىدۇ…</span>
-              )}
-            </InkButton>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-5">
-              {buttons.map((b, i) => (
-                <InkButton
-                  key={b.screen}
-                  icon={b.icon}
-                  className={`h-12 justify-start ps-1.5 pe-3 text-base ${i === buttons.length - 1 && buttons.length % 2 ? "col-span-2" : ""}`}
-                  onClick={() => onNavigate(b.screen)}
-                >
-                  {b.label}
-                </InkButton>
-              ))}
-            </div>
-          </div>
-        </section>
-        <section className="panel w-full p-5 md:ms-auto md:w-80">
-          <p className="font-display text-sm text-sun">ئويۇنچى كارتىسى</p>
-          <label className="mt-3 block text-sm text-muted" htmlFor="wavelet-name">
-            دولقۇنچاق ئىسمى
-          </label>
-          <input
-            id="wavelet-name"
-            dir="auto"
-            value={save.name}
-            maxLength={16}
-            suppressHydrationWarning
-            onChange={(e) => onName(e.target.value)}
-            className="mt-1 h-12 w-full rounded-sticker border-2 border-foam bg-navy-2 px-3 font-display text-xl text-foam"
+    <div className="lobby absolute inset-0 z-30 overflow-y-auto">
+      <span className="lobby-backdrop" aria-hidden />
+      <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-8 p-4 pt-8 pb-12 md:flex-row md:items-center md:gap-12 md:px-8 md:py-6">
+        <section className="flex w-full flex-col gap-6 md:max-w-lg" aria-labelledby="lobby-title">
+          <header className="lobby-logo">
+            <span className="lobby-logo-kicker">رەڭلىك زېمىن تالىشىش جېڭى</span>
+            <h1 id="lobby-title" className="lobby-logo-title">
+              سىياھ دولقۇنى
+            </h1>
+            <span className="lobby-logo-tape">زېمىن جېڭى</span>
+          </header>
+
+          <LobbySign
+            tone="lime"
+            hero
+            tilt={-2}
+            icon={<Play className="size-7" fill="currentColor" />}
+            title={ready ? "باشلاش" : "دولقۇن ئويغىنىۋاتىدۇ…"}
+            caption={`${stage.name} · ${mode.name} · 6 گە 6`}
+            disabled={!ready}
+            aria-busy={!ready}
+            onClick={onPlay}
           />
-          <p className="mt-4 font-display text-2xl text-orange">{rankTitle(save.wins)}</p>
-          <div className="mt-2">
-            <div className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="font-display text-lg text-sun">دەرىجە {lv.level}</span>
-              <span className="text-muted" dir="ltr">
-                {lv.into} / {lv.need}
-              </span>
-            </div>
-            <span className="ink-xp mt-1" role="progressbar" aria-label="تەجرىبە" aria-valuenow={lv.into} aria-valuemax={lv.need}>
-              <span style={{ width: `${(lv.into / lv.need) * 100}%` }} />
-            </span>
+          <div className="grid gap-x-4 gap-y-7 pt-1 sm:grid-cols-2">
+            <LobbySign tone="orange" tilt={1.6} icon={<MapIcon className="size-6" />} title="مەيدان تاللاش" caption={stage.name} onClick={() => onNavigate("stage")} />
+            <LobbySign tone="violet" tilt={-1.4} icon={<Shirt className="size-6" />} title="قورال-جابدۇق" caption={weapon} onClick={() => onNavigate("loadout")} />
           </div>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-muted">غەلىبە</dt>
-              <dd className="font-display text-xl">{save.wins}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">مۇسابىقە</dt>
-              <dd className="font-display text-xl">{save.matches}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">چاچرىتىش</dt>
-              <dd className="font-display text-xl">{save.splats}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">ئەڭ ياخشى نومۇر</dt>
-              <dd className="font-display text-xl">{save.best}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">تەڭگە</dt>
-              <dd className="flex items-center gap-1 font-display text-xl text-sun">
-                <Coins className="size-4" />
-                {save.coins}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">قورال</dt>
-              <dd className="font-display text-xl">{weapon}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">رەقىب</dt>
-              <dd className="font-display text-xl">{difficultyName(save.difficulty)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">پېرسوناژ</dt>
-              <dd className="font-display text-lg leading-7">{characterById(save.character).name}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">مەيدان</dt>
-              <dd className="font-display text-lg leading-7">{levelById(save.level).name}</dd>
-            </div>
-          </dl>
-          <p className="mt-4 text-sm leading-ug text-muted">
-            ئاپېلسىن گۇرۇپپا · 6 گە 6 · {difficultyName(save.difficulty)} رەقىب
-          </p>
+          <nav className="flex flex-wrap gap-x-4 gap-y-3" aria-label="باشقا">
+            <LobbyTag icon={<Settings className="size-4" />} onClick={() => onNavigate("settings")}>
+              تەڭشەك
+            </LobbyTag>
+            <LobbyTag icon={<CircleHelp className="size-4" />} onClick={() => onNavigate("howto")}>
+              ئويناش ئۇسۇلى
+            </LobbyTag>
+            <LobbyTag icon={<ScrollText className="size-4" />} onClick={() => onNavigate("credits")}>
+              ئويۇن ھەققىدە
+            </LobbyTag>
+          </nav>
         </section>
+
+        <aside className="status-card w-full md:ms-auto md:w-[23rem]" aria-label="ئويۇنچى كارتىسى">
+          <span className="status-tape">ئويۇنچى كارتىسى</span>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-baseline gap-2">
+              <span className="font-display text-lg text-lime">دەرىجە</span>
+              <span className="status-digits text-4xl text-foam">{lv.level}</span>
+            </p>
+            <p className="coin-pill" aria-label={`${save.coins} تەڭگە`}>
+              <span className="coin-icon" aria-hidden>
+                <Coins className="size-4" />
+              </span>
+              <span className="status-digits text-xl" dir="ltr">
+                {String(Math.min(save.coins, 9999999)).padStart(7, "0")}
+              </span>
+            </p>
+          </div>
+          <span className="xp-bar mt-2" role="progressbar" aria-label="تەجرىبە" aria-valuenow={lv.into} aria-valuemax={lv.need}>
+            <span className="xp-fill" style={{ width: `${(lv.into / lv.need) * 100}%` }} />
+            <span className="xp-text status-digits" dir="ltr">
+              {lv.into}/{lv.need}
+            </span>
+          </span>
+
+          <label className="nameplate mt-3" htmlFor="wavelet-name">
+            <span className="nameplate-title">{rankTitle(save.wins)}</span>
+            <span className="sr-only">دولقۇنچاق ئىسمى</span>
+            <input
+              id="wavelet-name"
+              dir="auto"
+              value={save.name}
+              maxLength={16}
+              suppressHydrationWarning
+              onChange={(e) => onName(e.target.value)}
+              className="nameplate-input"
+            />
+            <Pencil className="nameplate-pen size-4" aria-hidden />
+          </label>
+
+          <div className="mt-3">
+            <div className="status-row">
+              <span className="status-label">جەڭ ئۇسۇلى</span>
+              <LobbyTag small icon={<CircleHelp className="size-3.5" />} onClick={() => onNavigate("howto")}>
+                قائىدە
+              </LobbyTag>
+            </div>
+            <p className="status-mode">{mode.name}</p>
+            <div className="status-row">
+              <span className="status-label">مەيدان</span>
+              <LobbyTag small icon={<MapIcon className="size-3.5" />} onClick={() => onNavigate("stage")}>
+                ئۆزگەرتىش
+              </LobbyTag>
+            </div>
+            <div className="flex items-center gap-3 py-1.5">
+              <MapPreview id={save.level} zone={save.gameMode === "zone"} className="stage-thumb" />
+              <div className="min-w-0">
+                <p className="font-display text-xl leading-8 text-foam">{stage.name}</p>
+                <p className="text-sm leading-6 text-muted">{characterById(save.character).name}</p>
+                <p className="text-sm leading-6 text-muted">
+                  {weapon} · {difficultyName(save.difficulty)} رەقىب
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <dl className="mt-1 grid grid-cols-4 gap-1.5">
+            {stats.map(([label, value]) => (
+              <div key={label} className="stat-cell">
+                <dt className="truncate text-xs leading-6 text-muted">{label}</dt>
+                <dd className="status-digits text-xl text-foam">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-2 flex items-center justify-between text-xs text-muted">
+            <span>ئاپېلسىن گۇرۇپپا</span>
+            <span dir="ltr" className="status-digits">
+              {VERSION}
+            </span>
+          </p>
+        </aside>
       </div>
     </div>
   );
