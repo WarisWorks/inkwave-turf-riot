@@ -71,6 +71,50 @@ function mirror(p: Prim): Prim {
 const sym = (ps: Prim[]) => [...ps, ...ps.map(mirror)];
 const flip = (spawns: [number, number][]) => spawns.map(([x, z]) => [-x, -z] as [number, number]);
 
+
+/** Decorative Uyghur architectural vocabulary built from cheap primitives.
+ * These stay mostly at the arena edges so silhouettes become culturally distinct
+ * without closing important combat lanes.
+ */
+function uyghurGate(x: number, z: number, c = 0xd59a63, accent = 0x168f86): Prim[] {
+  return [
+    box(x - 2.8, 2.2, z, 1.1, 4.4, 1.2, c),
+    box(x + 2.8, 2.2, z, 1.1, 4.4, 1.2, c),
+    box(x, 4.15, z, 6.7, 0.7, 1.35, accent),
+    box(x, 4.7, z, 7.2, 0.18, 1.55, 0xf0d29a, true),
+    { t: "dome", x: x - 2.8, y: 4.4, z, r: 0.62, c: accent },
+    { t: "dome", x: x + 2.8, y: 4.4, z, r: 0.62, c: accent },
+  ];
+}
+function minaret(x: number, z: number, c = 0xc88954, accent = 0x168f86): Prim[] {
+  return [
+    box(x, 2.8, z, 2.1, 5.6, 2.1, c),
+    box(x, 5.75, z, 2.7, 0.35, 2.7, accent),
+    { t: "dome", x, y: 6.0, z, r: 1.18, c: accent },
+    box(x, 7.0, z, 0.22, 1.7, 0.22, 0x6b4226, true),
+  ];
+}
+function courtyardFacade(x: number, z: number, w = 10, c = 0xd29a67): Prim[] {
+  const parts: Prim[] = [
+    box(x, 1.8, z, w, 3.6, 1.1, c),
+    box(x, 3.75, z, w + 0.5, 0.28, 1.35, 0x8d4f35, true),
+  ];
+  for (let i = -2; i <= 2; i++) {
+    parts.push(box(x + i * (w / 6), 2.05, z - 0.62, 0.42, 1.35, 0.18, 0x245f73, true));
+    parts.push({ t: "dome", x: x + i * (w / 6), y: 2.72, z: z - 0.68, r: 0.34, c: 0x245f73 });
+  }
+  return parts;
+}
+function grapeHouse(x: number, z: number): Prim[] {
+  const parts: Prim[] = [
+    box(x, 2.2, z, 7.5, 4.4, 6.5, 0xb87343),
+    box(x, 4.55, z, 8.0, 0.28, 7.0, 0x8d5534, true),
+  ];
+  for (let ix = -2; ix <= 2; ix++) for (let iy = 0; iy < 3; iy++)
+    parts.push(box(x + ix * 1.15, 1.1 + iy * 1.05, z - 3.32, 0.5, 0.42, 0.12, 0x633b29, true));
+  return parts;
+}
+
 /* ── پورت · Harbor (the original map) ─────────────────────────────── */
 
 const harborCrates: [number, number, number, number, number][] = [
@@ -117,6 +161,11 @@ const HARBOR: LevelDef = {
     [-8, 28],
   ],
   prims: [
+    // Even the harbor carries Uyghur old-town architecture around its perimeter.
+    ...uyghurGate(0, -35, 0xd9a06c, 0x237d82),
+    ...uyghurGate(0, 35, 0xd9a06c, 0x237d82),
+    ...courtyardFacade(-22, -36, 10, 0xd5a171),
+    ...courtyardFacade(22, 36, 10, 0xd5a171),
     box(-20, 1.15, -27, 14, 2.3, 14, 0xffd7b4),
     stairs(-20, -20, 1, 10, 2.3, 6.6, 4, 0xe7d3c0),
     box(20.5, 2.1, -25.5, 13, 4.2, 15, 0xffe3c8),
@@ -188,6 +237,13 @@ const BAZAAR: LevelDef = {
     [8, -29],
   ]),
   prims: [
+    // Strong Kashgar silhouette: ceremonial gates, courtyard façades and edge minarets.
+    ...uyghurGate(0, -34, 0xd59a63, TILE),
+    ...uyghurGate(0, 34, 0xd59a63, TILE),
+    ...courtyardFacade(-20, -36, 12, 0xd49a67),
+    ...courtyardFacade(20, 36, 12, 0xd49a67),
+    ...minaret(-27.5, -31, BRICK, TILE),
+    ...minaret(27.5, 31, BRICK, TILE),
     // Central fountain: a tiled rim you have to hop over, and a domed spout.
     box(0, 0.45, -3.6, 8, 0.9, 0.8, TILE),
     box(0, 0.45, 3.6, 8, 0.9, 0.8, TILE),
@@ -255,6 +311,13 @@ const OASIS: LevelDef = {
     [7, -30],
   ]),
   prims: [
+    // Oasis settlement: mud-brick gates and watchtowers frame the desert arena.
+    ...uyghurGate(0, -34, 0xc9945c, 0x2b8c7f),
+    ...uyghurGate(0, 34, 0xc9945c, 0x2b8c7f),
+    ...courtyardFacade(-18, -36, 11, 0xc18a58),
+    ...courtyardFacade(18, 36, 11, 0xc18a58),
+    ...minaret(-27, 30, 0xb77d4d, 0x2b8c7f),
+    ...minaret(27, -30, 0xb77d4d, 0x2b8c7f),
     ...sym([
       // Palms ringing the pond.
       palm(-8, -5.5),
@@ -349,6 +412,13 @@ const VINEYARD: LevelDef = {
     [8, -29],
   ]),
   prims: [
+    // Turpan skyline: grape-drying houses and traditional courtyard entrances.
+    ...grapeHouse(-24, -31),
+    ...grapeHouse(24, 31),
+    ...grapeHouse(24, -31),
+    ...grapeHouse(-24, 31),
+    ...uyghurGate(0, -34, 0xb87343, 0x8f5b37),
+    ...uyghurGate(0, 34, 0xb87343, 0x8f5b37),
     // Footbridges over the karez, and a two-step supa pavilion in the middle.
     ...[-20, -10, 10, 20].map((x) => box(x, 0.225, 0, 4, 0.45, 5.8, 0x9b6b43)),
     box(0, 0.225, 0, 9, 0.45, 7.4, 0x8a5530),
