@@ -5,7 +5,7 @@ A desktop-first, Uyghur-language 6v6 ink shooter for players who want short, bro
 
 ## Core features
 - Turf, Zone, and Survival modes; four selectable arenas and three difficulty levels.
-- Four weapons, two sub weapons, and three charged specials.
+- Seven weapons, two sub weapons, and three charged specials.
 - Swimming in team ink, wall climbing, squid form, and animated match celebrations.
 - Six character choices using five supplied Uyghur models, bot roles, scoreboards, XP, coins, and persistent settings.
 - Uyghur RTL interface with ALKATIP Basma typography and touch controls.
@@ -16,16 +16,18 @@ A desktop-first, Uyghur-language 6v6 ink shooter for players who want short, bro
 - `src/game/levels.ts` defines arena geometry, water, and spawn points as data.
 - `src/game/environment/` builds Urumqi, Kashgar, Turpan and Taklimakan detail with shared instanced geometry, authors simple collision/roof routes, and provides layered city navigation for Urumqi and Kashgar. Urumqi loads five optimized supplied architecture models; Turpan loads one historic-minaret model. Visual meshes never participate in collision.
 - `src/game/characters/` caches five optimized supplied models and generates lightweight per-instance skeletons that follow the existing gameplay poses. The confirmed default is the newly supplied black-doppa boy from `cute-character.glb`; the internal `wave` ID remains compatible with existing saves/perks.
+- `src/game/weapons/` isolates the adapted Dualies, Slosher and Splatling timing/roll state and their procedural models. `src/game/rendering/liquidInk.ts` provides bounded wetness, ripple and swim-wake shader state. Both integrate through the existing engine.
 - `src/game/types.ts` holds shared contracts and loadout definitions.
 - `src/game/persist.ts` stores settings and progression in browser localStorage.
 - Vite 6 builds the app; Tailwind CSS 4 and `src/styles.css` style it.
 
 ## Decisions and constraints
+- Selectively adapt `jaydendavisnc/inkwave` at `2a32efea9ef253478dfeb7c4dcd2c49162264d5b` (MIT), preserving this game’s architecture and supplied assets. Do not replace the game with upstream’s separate app. Retain its notice in production; see `docs/INKWAVE_INTEGRATION.md`.
 - Preserve the existing UI/engine bridge and data-driven level architecture.
 - Keep the Uyghur copy, RTL behavior, and existing visual identity.
 - Score the match before preparing the player model for the celebration. Survival counts lives left (`lives` already includes a standing fighter's current life), so the celebration respawn cannot change the result.
 - Zone mode shares one `ZONE` rectangle (`src/game/levels.ts`) between scoring, bots, the ground shader, the minimap and stage previews. `recount()` updates zone shares with turf; `updateZone()` applies capture hysteresis and banks control points.
-- The merged release uses the existing main-branch version, 2.0.0.
+- The balanced Inkwave integration is version 2.1.0; package metadata and the UI use the same version.
 - Regression checks use Node's test runner and the existing TypeScript parser to exercise the actual end-match function in isolation; they do not verify WebGL rendering.
 - Kashgar uses 0/2/4/6.4 m gameplay tiers and the existing XZ turf ownership grid. Roof and street ink at the same XZ share ownership; independent per-storey scoring is not implemented.
 - Architecture uses the existing game’s Three.js geometry and Lambert materials, with explicitly requested models for Urumqi and Turpan’s historic minaret. Kashgar and Taklimakan remain entirely procedural. Taklimakan models its dunes, eroded rock ridges and date palms locally, with simple shaders for sand ripples and water highlights. Stage gameplay builds synchronously; models load asynchronously with procedural fallbacks and never gate match admission.

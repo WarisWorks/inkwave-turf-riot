@@ -1,4 +1,4 @@
-export type WeaponId = "spritzer" | "roller" | "charger" | "blaster";
+export type WeaponId = "spritzer" | "roller" | "charger" | "blaster" | "dualies" | "slosher" | "splatling";
 export type SubId = "pop-bomb" | "ink-beacon";
 export type SpecialId = "burst" | "tempest" | "reef-rush";
 export type Quality = "low" | "high";
@@ -108,6 +108,8 @@ export type HudSnap = {
   splat: number;
   swimming: boolean;
   charging: number;
+  weaponAction: "charge" | "stream" | "dodge" | "ready";
+  dodgeRolls: number;
   weapon: WeaponId;
   sub: SubId;
   specialId: SpecialId;
@@ -185,6 +187,21 @@ export const WEAPONS: WeaponInfo[] = [
     fire: 0.52,
     mobility: 0.62,
     cover: 0.92,
+  },
+  {
+    id: "dualies", name: "قوش تاپانچا", kind: "قوش ئاتقۇچ",
+    blurb: "ئىككى قولدا نۆۋەت بىلەن ئېتىڭ. ھەرىكەتلىنىپ ئېتىۋاتقاندا سەكرەشنى بېسىپ، ئىككى قېتىم دومىلاپ قاچالايسىز.",
+    range: 0.58, damage: 0.6, fire: 0.96, mobility: 1, cover: 0.7,
+  },
+  {
+    id: "slosher", name: "دولقۇن چېلىكى", kind: "چاچراتقۇچ",
+    blurb: "ئېغىر سىياھ دولقۇنىنى توساق ئۈستىدىن ئەگمە ئېتىڭ؛ كەڭ يول ۋە ئېگىز سۇپىلارنى بوياڭ.",
+    range: 0.62, damage: 0.84, fire: 0.45, mobility: 0.64, cover: 0.95,
+  },
+  {
+    id: "splatling", name: "قۇيۇن ئاتقۇچ", kind: "ئايلانما ئاتقۇچ",
+    blurb: "بېسىپ تۇرۇپ كۈچ يىغىڭ، قويۇپ بېرىپ سىياھ ئېقىمىنى ئېتىڭ. كۆپ كۈچ — ئۇزۇن ئېقىم.",
+    range: 0.9, damage: 0.7, fire: 1, mobility: 0.4, cover: 0.85,
   },
 ];
 

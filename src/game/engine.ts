@@ -1,5 +1,8 @@
 import { createCharacterLibrary, type CharacterAttachment } from "./characters/characterLibrary";
 import * as THREE from "three";
+import { ARSENAL, createArsenalState, cancelArsenal, stepArsenal, tryDodge, advanceDodge, arsenalMoveScale, type ArsenalState, type ArsenalShot } from "./weapons/arsenal";
+import { makeArsenalModel } from "./weapons/weaponModels";
+import { createLiquidInk, makeInkBrush, LIQUID_INK_UNIFORMS, LIQUID_INK_COLOR } from "./rendering/liquidInk";
 import { disposeObject } from "./environment/sceneResources";
 import { createKashgarEnvironment } from "./environment/kashgarEnvironment";
 import { createTurpanEnvironment } from "./environment/turpanEnvironment";
@@ -15,8 +18,8 @@ import type { BoardRow, BotRole, CharacterId, CharacterMods, Difficulty, HudSnap
 
 const GW = 120;
 const GH = 152;
-const TW = 480;
-const TH = 608;
+const TW = 960;
+const TH = 1216;
 // Match length in seconds; VITE_MATCH_LEN shortens it for local testing.
 const MATCH_LEN = Number(import.meta.env.VITE_MATCH_LEN) || 180;
 
@@ -111,6 +114,7 @@ type Actor = {
   fireCd: number;
   subCd: number;
   charge: number;
+  arsenal: ArsenalState;
   /** Short procedural kick used by firing animations. */
   recoil: number;
   /** Landing squash/impact impulse, decays every frame. */
@@ -172,6 +176,8 @@ type Proj = {
   /** Paint radius dropped along the flight path (0 = none). */
   trail: number;
   trailAcc: number;
+  /** Bucket drops share a set so one wave cannot damage an actor five times. */
+  hitActors?: Set<Actor>;
 };
 
 type Zone = { alive: boolean; x: number; z: number; team: Team; owner: number; life: number; acc: number; r: number; mesh: THREE.Group };
@@ -329,7 +335,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     g.fillRect(0, 0, 128, 128);
     return c;
   }
-  const brush: Record<Team, HTMLCanvasElement> = { 1: makeBrush("#ff6a1a"), 2: makeBrush("#5b4dff") };
+  const brush: Record<Team, HTMLCanvasElement> = { 1: makeInkBrush("#ff6a1a"), 2: makeInkBrush("#5b4dff") };
+  const liquidInk = createLiquidInk(GW, GH, TW, TH);
   const softWhite = makeBrush("#ffffff");
 
   let renderer: THREE.WebGLRenderer;
@@ -364,6 +371,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const inkMat = new THREE.ShaderMaterial({
     uniforms: {
       inkMap: { value: inkTex },
+      ...liquidInk.uniforms,
       cityStyle: { value: 0 },
       desertStyle: { value: 0 },
       uMin: { value: new THREE.Vector2(MAP.minX, MAP.minZ) },
@@ -393,6 +401,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     `,
     fragmentShader: `
       uniform sampler2D inkMap;
+      ${LIQUID_INK_UNIFORMS}
       uniform float cityStyle;
       uniform float desertStyle;
       uniform vec2 uMin;
@@ -430,7 +439,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         vec2 uv = (vWorld.xz - uMin) / uSize;
         vec4 ink = texture2D(inkMap, clamp(uv, 0.0, 1.0));
         float upFace = smoothstep(0.4, 0.85, n.y);
-        vec3 col = mix(base, ink.rgb, clamp(ink.a, 0.0, 1.0) * upFace);
+        ${LIQUID_INK_COLOR}
         if (zoneOn > 0.5) {
           // Zone mode: a dashed border band just inside the zone, over any ink, plus a faint wash.
           vec2 lo = vWorld.xz - zoneMin;
@@ -447,9 +456,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         float fog = smoothstep(fogNear, fogFar, length(vWorld - cameraPosition));
         col = mix(col, fogColor, fog);
         gl_FragColor = vec4(col, 1.0);
-        vec4 legacyColor = gl_FragColor;
         #include <colorspace_fragment>
-        gl_FragColor = mix(legacyColor, gl_FragColor, max(cityStyle, desertStyle));
       }
     `,
   });
@@ -822,6 +829,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const img = brush[team];
     ictx.drawImage(img, cx - rad, cy - rad, rad * 2, rad * 2);
     paintDirty = true;
+    if (radius > 0.9) liquidInk.ripple(x, surfaceTop(x, z), z, radius * 0.5);
     const gx = Math.floor(u * GW);
     const gz = Math.floor(v * GH);
     const gr = Math.ceil(radius * (GW / MAP.w)) + 1;
@@ -840,6 +848,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         if (dx * dx + dz * dz <= r2) {
           if (grid[i] !== team) flipped++;
           grid[i] = team;
+          liquidInk.markCell(i);
         }
       }
     }
@@ -920,6 +929,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function clearInk() {
     ictx.clearRect(0, 0, TW, TH);
     grid.fill(0);
+    liquidInk.reset();
     paintDirty = true;
   }
 
@@ -959,6 +969,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   } as const;
 
   function makeWeapon(kind: WeaponId, team: Team) {
+    if (kind === "dualies" || kind === "slosher" || kind === "splatling") return makeArsenalModel(kind, dark, cloth[team], inkGloss[team]);
     const g = new THREE.Group();
     const accent = cloth[team];
     const tankMat = inkGloss[team];
@@ -1265,6 +1276,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       roller: makeWeapon("roller", team),
       charger: makeWeapon("charger", team),
       blaster: makeWeapon("blaster", team),
+      dualies: makeWeapon("dualies", team),
+      slosher: makeWeapon("slosher", team),
+      splatling: makeWeapon("splatling", team),
     };
     (Object.keys(weapons) as WeaponId[]).forEach((k) => {
       weapons[k].visible = k === "spritzer";
@@ -1367,16 +1381,16 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   const BOTS: { name: string; team: Team; weapon: WeaponId; char: CharacterId; role: BotRole }[] = [
     { name: "ئايگۈل", team: 1, weapon: "spritzer", char: "scarf", role: "painter" },
     { name: "باتۇر", team: 1, weapon: "roller", char: "telpek", role: "defender" },
-    { name: "دىلشات", team: 1, weapon: "blaster", char: "dutar", role: "attacker" },
+    { name: "دىلشات", team: 1, weapon: "slosher", char: "dutar", role: "attacker" },
     { name: "گۈلنار", team: 1, weapon: "charger", char: "braids", role: "hunter" },
-    { name: "تۇرسۇن", team: 1, weapon: "spritzer", char: "doppa", role: "painter" },
+    { name: "تۇرسۇن", team: 1, weapon: "dualies", char: "doppa", role: "painter" },
 
     { name: "نىگار", team: 2, weapon: "spritzer", char: "braids", role: "painter" },
     { name: "ئەركىن", team: 2, weapon: "charger", char: "doppa", role: "hunter" },
     { name: "مەرۋە", team: 2, weapon: "blaster", char: "scarf", role: "attacker" },
     { name: "ئالىم", team: 2, weapon: "roller", char: "wave", role: "defender" },
-    { name: "رەنا", team: 2, weapon: "spritzer", char: "dutar", role: "painter" },
-    { name: "سامەت", team: 2, weapon: "blaster", char: "telpek", role: "attacker" },
+    { name: "رەنا", team: 2, weapon: "splatling", char: "dutar", role: "painter" },
+    { name: "سامەت", team: 2, weapon: "dualies", char: "telpek", role: "attacker" },
   ];
 
   const actors: Actor[] = [];
@@ -1405,6 +1419,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       fireCd: 0,
       subCd: 0,
       charge: 0,
+      arsenal: createArsenalState(),
       recoil: 0,
       landKick: 0,
       think: 0,
@@ -1490,15 +1505,35 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   const MAXD = 420;
   const decalGeo = new THREE.PlaneGeometry(1, 1);
-  const decalMap = new THREE.CanvasTexture(softWhite);
+  const decalBoundsMin = new THREE.InstancedBufferAttribute(new Float32Array(MAXD * 3), 3);
+  const decalBoundsMax = new THREE.InstancedBufferAttribute(new Float32Array(MAXD * 3), 3);
+  decalGeo.setAttribute("decalBoundsMin", decalBoundsMin);
+  decalGeo.setAttribute("decalBoundsMax", decalBoundsMax);
+  const decalMap = new THREE.CanvasTexture(makeInkBrush("#ffffff"));
   decalMap.colorSpace = THREE.SRGBColorSpace;
-  const decalMat = new THREE.MeshBasicMaterial({
+  const decalMat = new THREE.MeshPhongMaterial({
+    shininess: 65,
+    specular: 0x778899,
     map: decalMap,
     transparent: true,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -2,
   });
+  // Clip each pooled wall splat to the collision face it hit, including its pop animation.
+  // This prevents large bucket splats hanging in midair beyond a cover edge.
+  decalMat.onBeforeCompile = (shader) => {
+    const varyings = "varying vec3 vDecalWorld; varying vec3 vDecalMin; varying vec3 vDecalMax;";
+    shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
+      attribute vec3 decalBoundsMin; attribute vec3 decalBoundsMax; ${varyings}`)
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+      vDecalWorld = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
+      vDecalMin = decalBoundsMin; vDecalMax = decalBoundsMax;`);
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>
+${varyings}`)
+      .replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>
+      if (any(lessThan(vDecalWorld, vDecalMin)) || any(greaterThan(vDecalWorld, vDecalMax))) discard;`);
+  };
   const decals = new THREE.InstancedMesh(decalGeo, decalMat, MAXD);
   decals.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXD * 3), 3);
   decals.frustumCulled = false;
@@ -1528,6 +1563,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function addDecal(x: number, y: number, z: number, nx: number, ny: number, nz: number, radius: number, team: Team) {
     const i = decalCursor % MAXD;
     decalCursor++;
+    const bx = x - nx * 0.02, by = y - ny * 0.02, bz = z - nz * 0.02;
+    const face = collisionIndex.at(bx, bz).find(b => bx >= b.minX - 0.01 && bx <= b.maxX + 0.01 && by >= b.minY - 0.01 && by <= b.maxY + 0.01 && bz >= b.minZ - 0.01 && bz <= b.maxZ + 0.01);
+    decalBoundsMin.setXYZ(i, face ? face.minX - 0.06 : MAP.minX, face ? face.minY - 0.06 : 0, face ? face.minZ - 0.06 : MAP.minZ);
+    decalBoundsMax.setXYZ(i, face ? face.maxX + 0.06 : MAP.minX + MAP.w, face ? face.maxY + 0.06 : 20, face ? face.maxZ + 0.06 : MAP.minZ + MAP.d);
+    decalBoundsMin.needsUpdate = decalBoundsMax.needsUpdate = true;
     decalPos[i * 3] = x + nx * 0.04;
     decalPos[i * 3 + 1] = y + ny * 0.04;
     decalPos[i * 3 + 2] = z + nz * 0.04;
@@ -1979,7 +2019,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function spawnProj(p: Omit<Proj, "alive" | "stuck" | "trail" | "trailAcc"> & { trail?: number }) {
     const slot = projs.find((s) => !s.alive) ?? projs[0];
-    Object.assign(slot, { trail: 0, trailAcc: 0 }, p, { alive: true, stuck: false });
+    Object.assign(slot, { trail: 0, trailAcc: 0, hitActors: undefined }, p, { alive: true, stuck: false });
   }
 
   function fireDirection(actor: Actor, aimX: number, aimY: number, aimZ: number) {
@@ -1989,6 +2029,40 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       vA.set(f.x, 0.05, f.z);
     }
     return vA.normalize();
+  }
+
+  function shootArsenal(actor: Actor, dir: THREE.Vector3, shot: ArsenalShot, fromPlayer: boolean) {
+    const f = yawForward(actor.yaw), right = yawRight(actor.yaw);
+    const w = ARSENAL[shot.kind];
+    const offset = shot.kind === "dualies" ? shot.hand * 0.26 : 0;
+    const count = shot.kind === "slosher" ? ARSENAL.slosher.drops : 1;
+    const hitActors = shot.kind === "slosher" ? new Set<Actor>() : undefined;
+    for (let i = 0; i < count; i++) {
+      const lane = i - (count - 1) / 2;
+      const spread = shot.kind === "slosher" ? lane * 0.09 : (rand() - 0.5) * (actor.arsenal.lock > 0 ? 0.016 : 0.045);
+      const speed = w.speed * (shot.kind === "slosher" ? 1 - Math.abs(lane) * 0.07 : 1);
+      const length = Math.hypot(dir.x + right.x * spread, dir.y, dir.z + right.z * spread) || 1;
+      spawnProj({
+        x: actor.x + f.x * 0.55 + right.x * offset, y: actor.y + 1.15, z: actor.z + f.z * 0.55 + right.z * offset,
+        vx: (dir.x + right.x * spread) / length * speed,
+        vy: dir.y / length * speed + (shot.kind === "slosher" ? 7.5 : 0),
+        vz: (dir.z + right.z * spread) / length * speed,
+        grav: shot.kind === "slosher" ? ARSENAL.slosher.gravity : 7,
+        life: shot.kind === "slosher" ? 1.2 : ARSENAL[shot.kind].life,
+        team: actor.team, dmg: w.damage * (fromPlayer ? 1 : 0.65), splash: 0, splashR: 0,
+        paintR: w.radius * (fromPlayer ? 1 : 0.8), hitR: shot.kind === "slosher" ? 0.34 : 0.27,
+        scale: shot.kind === "slosher" ? 2.4 - Math.abs(lane) * 0.3 : shot.kind === "splatling" ? 1.25 : 1,
+        kind: shot.kind === "slosher" ? "flick" : "shot", owner: actors.indexOf(actor), hitActors,
+        trail: shot.kind === "slosher" ? 0 : 0.4,
+      });
+    }
+    actor.recoil = shot.kind === "slosher" ? 1.5 : 0.7;
+    burst(actor.x + f.x * 0.7 + right.x * offset, actor.y + 1.2, actor.z + f.z * 0.7 + right.z * offset, actor.team, shot.kind === "slosher" ? 12 : 3, 3);
+    if (fromPlayer) {
+      shake = Math.min(0.5, shake + (shot.kind === "slosher" ? 0.1 : 0.02));
+      audio.shoot(shot.kind === "slosher" ? 260 : shot.kind === "dualies" ? 680 + shot.hand * 80 : 420);
+      if (shot.kind === "slosher") audio.splash(0.75);
+    }
   }
 
   function shootSpritzer(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
@@ -2216,6 +2290,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function useSpecial(actor: Actor, dir: THREE.Vector3) {
     if (actor.special < 100 || !actor.alive || actor.spT > 0) return;
     actor.special = 0;
+    cancelArsenal(actor);
     actor.spT = SPECIAL_CHARGE;
     actor.spX = dir.x;
     actor.spY = dir.y;
@@ -2368,11 +2443,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     const dy = p.y - oy;
     const dz = p.z - oz;
     const dist = Math.hypot(dx, dy, dz) || 0.0001;
+    const hit = castWorld(ox, oy, oz, dx / dist, dy / dist, dz / dist, dist);
     for (let i = 0; i < actors.length; i++) {
       const a = actors[i];
       if (!a.alive || a.team === p.team || a.invuln > 0 || i === p.owner) continue;
-      const cy = clamp(p.y, a.y + 0.15, a.y + 1.5);
-      if ((a.x - p.x) ** 2 + (cy - p.y) ** 2 + (a.z - p.z) ** 2 < (0.42 + p.hitR) ** 2) {
+      const t = clamp(((a.x - ox) * dx + (a.y + 0.85 - oy) * dy + (a.z - oz) * dz) / (dist * dist), 0, 1);
+      if (hit && t * dist >= hit.dist) continue;
+      const sx = ox + dx * t, sy = oy + dy * t, sz = oz + dz * t;
+      const cy = clamp(sy, a.y + 0.15, a.y + 1.5);
+      if ((a.x - sx) ** 2 + (cy - sy) ** 2 + (a.z - sz) ** 2 < (0.42 + p.hitR) ** 2) {
+        if (p.hitActors?.has(a)) continue;
+        p.hitActors?.add(a);
         const owner = actors[p.owner] ?? null;
         if (p.dmg > 0) hurt(a, p.dmg, owner, "splat");
         paint(a.x, a.z, Math.max(0.7, p.paintR * 0.55), p.team, owner);
@@ -2382,7 +2463,6 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         return;
       }
     }
-    const hit = castWorld(ox, oy, oz, dx / dist, dy / dist, dz / dist, dist);
     if (hit) {
       impactProj(p, hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz);
       return;
@@ -2397,7 +2477,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function playerAim(actor: Actor) {
     camera.getWorldDirection(vC);
-    vB.copy(camera.position).addScaledVector(vC, 50);
+    const target = castWorld(camera.position.x, camera.position.y, camera.position.z, vC.x, vC.y, vC.z, 50);
+    vB.copy(camera.position).addScaledVector(vC, target?.dist ?? 50);
     fireDirection(actor, vB.x, vB.y, vB.z);
     aimDir.copy(vA);
     return aimDir;
@@ -2405,10 +2486,17 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function handlePlayerFire(actor: Actor, dt: number, fireHeld: boolean) {
     if (!actor.alive || countdown > 0 || actor.swimming) {
-      if (actor.swimming) actor.charge = 0;
+      if (actor.swimming) cancelArsenal(actor);
       return;
     }
     const dir = playerAim(actor);
+    if (actor.weapon === "dualies" || actor.weapon === "slosher" || actor.weapon === "splatling") {
+      const before = actor.charge;
+      const shot = stepArsenal(actor, dt, fireHeld);
+      if (shot) shootArsenal(actor, dir, shot, true);
+      if (before < 1 && actor.charge === 1 && actor.arsenal.stream <= 0) audio.blip();
+      return;
+    }
     if (actor.weapon === "roller") {
       if (fireHeld) rollerTick(actor, dt, true);
       if (fireRelease) flickRoller(actor, dir, true);
@@ -2549,29 +2637,38 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     else if (floor && floor !== a.team) speed = 2.65;
     if (a.weapon === "roller" && (fireMouse || input.fire) && a.grounded) speed *= 0.9;
     if (charging) speed *= 0.3;
+    else if (!a.swimming) speed *= arsenalMoveScale(a);
     const mx = wx * speed;
     const mz = wz * speed;
     if (a.climbing) a.vy = 6.4 * a.mods.swim;
-    if (jumpEdge && a.grounded && !a.swimming && !charging) {
-      a.vy = 8.5;
+    const firing = fireMouse || input.fire;
+    let dodged = false;
+    if (jumpEdge && !charging) dodged = tryDodge(a, wx, wz, firing);
+    if (dodged) { audio.splash(0.7); burst(a.x, a.y + 0.2, a.z, a.team, 12, 4); }
+    if (jumpEdge && a.grounded && !charging && !dodged && a.arsenal.dodgeTime <= 0) {
+      a.vy = a.swimming ? 9.5 : 8.5;
       a.grounded = false;
       a.swimming = false;
       audio.blip();
       if (a.weapon === "roller" && (fireMouse || input.fire)) flickRoller(a, playerAim(a), true);
     }
-    steer(a, mx, mz, dt, gripFor(a));
+    const dodge = advanceDodge(a, dt);
+    if (dodge) {
+      a.mvx = dodge.x; a.mvz = dodge.z;
+      a.swimming = false; a.climbing = false;
+      if (a.grounded) paint(a.x, a.z, 0.62, a.team, a, false);
+    } else steer(a, mx, mz, dt, gripFor(a));
     moveActor(a, a.mvx, a.mvz, dt);
     environmentInk(a, dt);
     if (a.swimming) audio.swim(true);
     else audio.swim(false);
     if (charging) {
-      a.charge = 0;
+      cancelArsenal(a);
       return;
     }
-    const firing = fireMouse || input.fire;
-    handlePlayerFire(a, dt, firing);
-    if (bombEdge) throwSub(a, playerAim(a), true);
-    if (specialEdge) useSpecial(a, playerAim(a));
+    if (!dodge) handlePlayerFire(a, dt, firing);
+    if (bombEdge && !dodge) throwSub(a, playerAim(a), true);
+    if (specialEdge && !dodge) useSpecial(a, playerAim(a));
   }
 
   function pickGoal(a: Actor) {
@@ -2818,6 +2915,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.yaw += clamp(dyaw, -3.2 * dt, 3.2 * dt);
     let speed = a.swimming ? 10.2 * a.mods.swim : floor && floor !== a.team ? 2.8 : 5.7 * a.mods.run;
     if (a.weapon === "roller" && a.mode === "push") speed *= 0.92;
+    if (!a.swimming) speed *= arsenalMoveScale(a);
     speed *= T.speed;
     const before = Math.hypot(a.vx, a.vz);
     steer(a, dx * speed, dz * speed, dt, gripFor(a) * 0.8);
@@ -2838,7 +2936,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       /* filled in environment */
     }
     const fwd = yawForward(a.yaw);
-    if (a.weapon === "roller") {
+    if (a.weapon === "dualies" || a.weapon === "slosher" || a.weapon === "splatling") {
+      const fighting = a.mode === "fight" && nearest;
+      const aim = fighting
+        ? fireDirection(a, fighting.x + (rand() - 0.5) * T.spread, fighting.y + 0.9, fighting.z + (rand() - 0.5) * T.spread)
+        : fireDirection(a, a.x + fwd.x * 9, a.y + 0.1, a.z + fwd.z * 9);
+      const fire = !a.swimming && (a.arsenal.stream > 0 || a.ink > 12) && (a.weapon !== "splatling" || a.charge < 0.82);
+      const shot = stepArsenal(a, dt, fire, 1.6 * T.cd);
+      if (shot) shootArsenal(a, aim, shot, false);
+    } else if (a.weapon === "roller") {
       if (a.ink > 8) rollerTick(a, dt, false);
       if (a.mode === "fight" && nearest && nd < 7 && a.fireCd <= 0) {
         a.fireCd = 0.8 * T.cd;
@@ -2905,6 +3011,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     a.mvz = 0;
     a.yaw = a.team === 1 ? Math.PI : 0;
     a.charge = 0;
+    a.arsenal = createArsenalState();
+    a.fireCd = 0;
     a.mesh.root.visible = mode === "play";
     if (a.isPlayer && isSurvival() && a.lives === 1 && phase === "live") setBanner("ئاخىرقى جېنىڭىز!");
   }
@@ -3074,6 +3182,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.splat = 0;
       a.rush = 0;
       a.charge = 0;
+      a.arsenal = createArsenalState();
       a.recoil = 0;
       a.landKick = 0;
       a.fireCd = 0;
@@ -3175,6 +3284,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       splat: p ? p.splat / 100 : 0,
       swimming: p?.swimming ?? false,
       charging: p?.charge ?? 0,
+      weaponAction: p?.arsenal.dodgeTime > 0 ? "dodge" : p?.arsenal.stream > 0 ? "stream" : p?.charge > 0 ? "charge" : "ready",
+      dodgeRolls: p?.arsenal.rolls ?? 2,
       weapon: p?.weapon ?? "spritzer",
       sub: p?.sub ?? "pop-bomb",
       specialId: p?.specialId ?? "tempest",
@@ -3398,7 +3509,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
           1 + m.swim * 0.5 + a.landKick * 0.025,
         );
         m.body.position.y = bob - a.landKick * 0.06 + charging * 0.45;
-        m.body.rotation.set(forwardLean - a.recoil * 0.05, charging * charging * 9, sideLean);
+        const dodgePose = a.arsenal.dodgeTime > 0 ? Math.sin((1 - a.arsenal.dodgeTime / ARSENAL.dualies.rollTime) * Math.PI) : 0;
+        m.body.position.y -= dodgePose * 0.28;
+        m.body.rotation.set(forwardLean - a.recoil * 0.05 - dodgePose * 0.4, charging * charging * 9, sideLean + dodgePose * 0.65 * a.arsenal.dodgeX);
         m.torso.scale.set(1, 1 + (moving ? 0 : Math.sin(t * 2.4 + a.phase * 0.1) * 0.03), 1);
         m.headPivot.rotation.set(Math.sin(t * 1.3 + a.phase) * 0.035 - a.recoil * 0.06, 0, 0);
         m.armGun.rotation.set(-1.35 + a.recoil * 0.4, 0, 0.05);
@@ -3434,6 +3547,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
       const flicker = a.invuln > 0 && a.spT <= 0 && !ended && Math.sin(t * 24) > 0;
       m.root.visible = !flicker;
+      const drum = m.weapons.splatling.getObjectByName("rotary-drum");
+      if (drum && a.weapon === "splatling") drum.rotation.z += dt * (a.arsenal.stream > 0 ? 42 : 3 + a.charge * 24);
+      if (a.weapon === "slosher" && a.arsenal.slosh >= 0) m.mount.rotation.x -= Math.sin(a.arsenal.slosh / ARSENAL.slosher.windup * Math.PI) * 0.65;
+      if (a.weapon === "dualies") {
+        for (const [name, side] of [["left-pistol", -1], ["right-pistol", 1]] as const) {
+          const pistol = m.weapons.dualies.getObjectByName(name);
+          if (pistol) pistol.position.z = a.arsenal.hand === side ? -a.recoil * 0.12 : 0;
+        }
+      }
       const roll = m.weapons.roller.getObjectByName("roll");
       if (roll && a.weapon === "roller") roll.rotation.x += speed * dt * 2.2;
 
@@ -3709,10 +3831,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   /** Follows the player with gentle easing; after the whistle it swings round to face them. */
   function updateCamera(dt: number) {
     if (mode !== "play") {
+      camera.fov = 68;
+      camera.updateProjectionMatrix();
       camInit = false;
       return;
     }
     const a = camSubject();
+    const fov = phase === "ended" ? 68 : 68 + (a.swimming ? 5 : 2) * Math.min(1, Math.hypot(a.vx, a.vz) / 11.4);
+    camera.fov += (fov - camera.fov) * (1 - Math.exp(-5 * dt));
+    camera.updateProjectionMatrix();
     const f = yawForward(a.yaw);
     const r = yawRight(a.yaw);
     const ended = phase === "ended";
@@ -3742,9 +3869,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       const cp = Math.cos(pitch);
       const sp = Math.sin(pitch);
       const headY = a.y + (a.swimming ? 0.7 : 1.35);
-      let cx = a.x - f.x * dist * cp + r.x * 0.3;
+      let cx = a.x - f.x * dist * cp + r.x * 0.72;
       let cy = headY + dist * sp * 0.75 + 0.25;
-      let cz = a.z - f.z * dist * cp + r.z * 0.3;
+      let cz = a.z - f.z * dist * cp + r.z * 0.72;
       // castWorld measures distance along its direction, so the ray must be unit length.
       const boom = Math.hypot(cx - a.x, cy - headY, cz - a.z) || 1;
       const hit = castWorld(a.x, headY, a.z, (cx - a.x) / boom, (cy - headY) / boom, (cz - a.z) / boom, boom);
@@ -3755,7 +3882,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
         cz = a.z + (cz - a.z) * sc;
       }
       camWant.set(cx, cy, cz);
-      lookWant.set(a.x + f.x * 1.4, headY - 0.15 + sp * 1.3, a.z + f.z * 1.4);
+      lookWant.set(a.x + f.x * 1.4 + r.x * 0.35, headY - 0.15 + sp * 1.3, a.z + f.z * 1.4 + r.z * 0.35);
     }
     // Snap on teleports (match start, respawn); otherwise ease toward the target.
     if (!camInit || camPos.distanceToSquared(camWant) > 64) {
@@ -3862,11 +3989,11 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       cfg.input.lookX = 0;
       cfg.input.lookY = 0;
     }
-    pollEdges();
     acc += dt;
     let steps = 0;
     let first = true;
     while (acc >= STEP && steps < 5) {
+      if (first) pollEdges();
       if (!first) {
         jumpEdge = false;
         bombEdge = false;
@@ -3878,8 +4005,9 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       acc -= STEP;
       steps++;
     }
+    liquidInk.update(paused ? 0 : dt, mode === "play" && phase !== "ended" ? actors : [], camera.position, cfg.quality === "high");
     updateCamera(dt);
-    syncVisuals(dt);
+    syncVisuals(paused ? 0 : dt);
     updateFx(dt);
     popDecals(dt);
     updateFeet(dt);
@@ -4048,6 +4176,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     perfPanel?.remove();
     if (window.__inkwave) delete window.__inkwave;
     inkTex.dispose();
+    liquidInk.dispose();
     renderer.dispose();
     audio.close();
   };

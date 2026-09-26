@@ -64,7 +64,7 @@ type Screen = "menu" | "loadout" | "stage" | "settings" | "howto" | "credits" | 
 /** What the last match earned, shown on the results screen. */
 type Reward = { xp: number; coins: number; record: boolean; levelUp: number };
 
-const VERSION = "v2.0.0";
+const VERSION = "v2.1.0";
 
 function difficultyName(id: Difficulty) {
   return DIFFICULTIES.find((d) => d.id === id)?.name ?? "";
@@ -594,11 +594,13 @@ function Loadout({
           <div className="order-first h-[58vh] lg:order-none lg:h-auto" aria-hidden />
           <div className="flex flex-col gap-4">
             <div className="panel p-4">
-              <p className="mb-3 text-sm text-muted">ئاساسىي قورال</p>
+              <p className="mb-3 flex items-center justify-between text-sm text-muted"><span>ئاساسىي قورال</span><span className="rounded-full bg-orange/15 px-2 text-orange">7 قورال</span></p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {WEAPONS.map((w) => (
                   <InkOption key={w.id} selected={save.weapon === w.id} className="p-3" onClick={() => onWeapon(w.id)}>
-                    <span className="block font-display text-lg">{w.name}</span>
+                    <span className="flex items-center justify-between gap-2 font-display text-lg">{w.name}
+                      {w.id === "dualies" || w.id === "slosher" || w.id === "splatling" ? <Sparkles className="size-4 shrink-0 text-orange" aria-label="يېڭى" /> : null}
+                    </span>
                     <span className="block text-sm text-sun">{w.kind}</span>
                   </InkOption>
                 ))}
@@ -812,7 +814,10 @@ function HowTo({ onBack }: { onBack: () => void }) {
     { title: "ھەرىكەت", keys: ["WASD", "↑↓←→"], text: "ئالدىغا، كەينىگە ۋە يانغا مېڭىڭ؛ يۆنىلىش كۇنۇپكىلىرىمۇ بولىدۇ. A سولغا، D ئوڭغا يانتۇ ماڭىدۇ." },
     { title: "نىشان", keys: ["مائۇس", "Q", "E"], text: "چېكىپ سۆرەڭ ياكى نۇربەلگىنى قۇلۇپلاڭ. كۇنۇپكا ياقتۇرسىڭىز Q ۋە E بىلەن بۇرۇلۇڭ." },
     { title: "ئېتىش", keys: ["سول چېكىش"], text: "پۈركۈگۈچ ئېقىتىدۇ، دومىلاتقۇچ ئىتتىرىدۇ، توپلىغۇچ كۈچ توپلايدۇ، پارتلاتقۇچ ئېگىز ئاتىدۇ." },
-    { title: "سەكرەش", keys: ["Space"], text: "دومىلىتىۋاتقاندا سەكرىسىڭىز، چاچرىتىش تېخىمۇ يىراققا ئۇچىدۇ." },
+    { title: "سەكرەش", keys: ["Space"], text: "ئۈزۈۋاتقاندا سەكرەپ سۇ بوشلۇقىدىن ئۆتۈڭ. دومىلىتىۋاتقاندا سەكرىسىڭىز، سىياھ تېخىمۇ يىراققا ئۇچىدۇ." },
+    { title: "قوش تاپانچا", keys: ["Space"], text: "ھەرىكەتلىنىپ ئېتىۋاتقاندا سەكرەشنى بېسىپ دومىلاپ قاچىڭ. ئۇدا ئىككى قېتىم دومىلايسىز؛ ئېتىشنى توختاتسىڭىز قايتا تەييار بولىدۇ." },
+    { title: "دولقۇن چېلىكى", keys: [], text: "سىياھنى ئەگمە ئېتىپ، توساق ئۈستىدىكى ياكى ئارقىسىدىكى نىشانلارغا يەتكۈزۈڭ." },
+    { title: "قۇيۇن ئاتقۇچ", keys: [], text: "ئېتىشنى بېسىپ تۇرۇپ كۈچ يىغىڭ، قويۇپ بېرىپ تېز سىياھ ئېقىمىنى ئېتىڭ. ئۈزسىڭىز ئېقىم توختايدۇ." },
     { title: "ئۈزۈش", keys: ["Shift"], text: "ئۆز سىياھىڭىزدا بېسىپ تۇرسىڭىز، سىياھ بېلىقى شەكلىگە كىرىپ تېز ئۈزىسىز ۋە سىياھ تولۇقلايسىز. رەقىب سىياھى سىزنى ئاستىلىتىدۇ ۋە بويايدۇ." },
     { title: "تامغا يامىشىش", keys: ["Shift", "W"], text: "ئالدى بىلەن تامنى ئۆز سىياھىڭىز بىلەن بوياڭ، ئاندىن ئۈزۈپ تامغا قاراپ ئىلگىرىلىسىڭىز، تام بويلاپ يۇقىرىغا چىقىسىز." },
     { title: "ئالاھىدە ماھارەت", keys: ["F"], text: "زېمىن بويىغانسېرى ئۆلچىگۈچ تولىدۇ. تولغاندا F نى بېسىڭ: قىسقا كۈچ يىغىپ، ئەتراپنى بىراقلا سىياھقا چۆمدۈرىدىغان پارتلاش ياسايسىز." },
@@ -871,10 +876,13 @@ function Credits({ onBack }: { onBack: () => void }) {
         <h2 className="mt-2 font-display text-4xl">ئويۇن ھەققىدە</h2>
         <section className="panel p-5 leading-ug">
           <p className="font-display text-2xl text-orange">سىياھ دولقۇنى: زېمىن جېڭى</p>
-          <p className="mt-3">4 گە 4 زېمىن تالىشىش ئېتىش ئويۇنى — ئەسلىي ئىجادىيەت. Claude Opus 5.5 بىلەن ياسالدى.</p>
+          <p className="mt-3">6 گە 6 زېمىن تالىشىش ئويۇنى — ئۇيغۇر پېرسوناژلىرى، تۆت مەيدان ۋە يەتتە قورال.</p>
           <p className="mt-3 text-sm leading-ug text-muted">
-            پېرسوناژلار، مەيدانلار ۋە بارلىق قوراللار ئەسلىي ئىجادىيەت. Nintendo نىڭ ھېچقانداق پېرسوناژى، ئىسمى ياكى ماتېرىيالى ئىشلىتىلمىدى. شەكىل، سىياھ ۋە
-            ئاۋازلارنىڭ ھەممىسى توركۆرگۈچتە ھاسىل قىلىنىدۇ.
+            يېڭى قورال ۋە سىياھ ئۈنۈملىرى Jayden Davis نىڭ INKWAVE تۈرىدىن ماسلاشتۇرۇلدى. پېرسوناژ مودېللىرى ۋە ئۇيغۇر مەيدانلىرى ساقلاپ قېلىندى.
+          </p>
+          <p className="mt-3 flex flex-wrap gap-4 text-sm text-sun" dir="ltr">
+            <a href="https://github.com/jaydendavisnc/inkwave" target="_blank" rel="noreferrer" className="underline">INKWAVE · Jayden Davis</a>
+            <a href="/licenses/inkwave-MIT.txt" target="_blank" rel="noreferrer" className="underline">MIT License</a>
           </p>
           <p className="mt-4 font-display text-sm text-sun">{VERSION}</p>
         </section>
@@ -1218,6 +1226,20 @@ function Hud({
         </span>
         <span className="kill-splat" style={{ opacity: hud.kill, transform: `scale(${2.6 - hud.kill * 1.2}) rotate(${hud.kill * 40}deg)` }} aria-hidden />
       </div>
+
+      {live && !out && hud.respawn <= 0 && !lowInk && (hud.weapon === "splatling" || hud.weapon === "dualies") ? (
+        <div className="weapon-feedback absolute top-[calc(50%+2.6rem)] left-1/2 -translate-x-1/2 rounded-xl bg-navy/85 px-3 py-1.5 text-center text-xs text-foam">
+          {hud.weapon === "splatling" ? <>
+            <p>{hud.weaponAction === "stream" ? "سىياھ ئېقىمى" : hud.charging >= 1 ? "تەييار — قويۇپ بېرىڭ" : "بېسىپ كۈچ يىغىڭ"}</p>
+            <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-foam/15" role="progressbar" aria-label="قورال كۈچى" aria-valuenow={Math.round(hud.charging * 100)} aria-valuemin={0} aria-valuemax={100}>
+              <div className={`h-full rounded-full ${hud.weaponAction === "stream" ? "bg-sun" : "bg-orange"}`} style={{ width: `${hud.charging * 100}%` }} />
+            </div>
+          </> : <>
+            <p>{hud.weaponAction === "dodge" ? "دومىلاۋاتىدۇ" : "دومىلاش"} <span dir="ltr">{hud.dodgeRolls}/2</span></p>
+            <p className="text-muted">{touch ? "ئېتىش + ھەرىكەت + سەكرەش" : "Space + ھەرىكەت + ئېتىش"}</p>
+          </>}
+        </div>
+      ) : null}
 
       {lowInk ? (
         <p className="low-ink absolute top-[calc(50%+2.4rem)] left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-navy/85 px-3 py-0.5 text-sm whitespace-nowrap text-orange">

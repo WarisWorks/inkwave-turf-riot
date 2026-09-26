@@ -1,11 +1,23 @@
 # Project Progress
 
 ## Current Status
-All four environments are complete. The default player uses the optimized `cute.glb` runtime copy (676,516 bytes / 19,999 triangles), prepared from the user-confirmed `cute-character.glb`. The unused 61 MB original has now been removed at the user's request. It retains the black doppa, short curls, embroidered shirt and supplied walking/hand pose, with a fitted lightweight rig. Five runtime character models serve six choices; the prior corrected blue-doppa boy remains the dutar character. All 58 tests and the production build pass; eleven active GLBs ship in an 8.8 MiB build. Loadout and live gameplay were visually checked on the verified development server. Physical phone performance, detailed garment animation and competitive balance remain playtest tasks.
+Version 2.1.0 integrates selected mechanics and liquid-ink visuals from Jayden Davis's Inkwave while preserving the existing React/TypeScript/Three.js architecture, supplied Uyghur characters, four arenas, saves, 6v6 teams and three game modes. The loadout now has seven weapons: Dualies with two dodge rolls, an arcing Slosher and a charged Splatling join the original four. Ink has wetness, edge relief, impact ripples and swim wakes; wall decals clip to their hit surfaces. Swim jumping, camera framing, aiming and fast-projectile collision are improved. The incoming lobby, Zone/Survival and event fixes are retained.
 
-The reusable `add-glb-to-game` skill is documented in `skills/` and installed in the user's Codex skills directory.
+All 83 tests and the production build pass. Live browser checks verified all three new weapon types, two-roll use, charge/release, painting, stage changes across all four arenas, a swim leap in low quality, and the responsive 390×844 loadout. Sampled desktop gameplay ran at 60 FPS; this is not a physical phone benchmark. All eleven runtime GLBs remain unchanged and match their packaged copies. The existing large engine bundle warning remains (about 752 kB).
+
+The default remains the optimized black-doppa `cute.glb`. The reusable `add-glb-to-game` skill and previous Downloads model optimization work remain documented below.
 
 ## Completed
+- Integrated the v2.1 Inkwave feature port: three new weapon state machines/models, bots, Uyghur loadout/help, charge/roll HUD, swim leaps, wet ink/wakes and clipped wall splats.
+- Added fifteen executable arsenal, save, wetness/wake, pooled projectile, wall-occlusion and per-volley regression checks; all 83 tests pass.
+- Retained upstream MIT attribution in the source, Credits and production assets; documented exact source revision and port boundaries in `docs/INKWAVE_INTEGRATION.md`.
+- Recovered the incoming lobby and game-mode session histories omitted by the concurrently completed progress-log merge resolution; retained the local Downloads-library history.
+- Restyled the main menu as a Splatoon-inspired lobby: tilted hanging signs for Play/Stage/Loadout, dark slanted tags for the rest, and a dark status card (level, striped XP bar, coin counter, Etles-ikat nameplate, Mode/Stage rows with map thumbnail, stats). Checked at 1000×600 and 390×844.
+- Fixed arena events never firing: the 0.35 s score tick reset the event clock. Events now reset at match start, clear at the whistle and menu, and the sandstorm eases fog/sky toward sand, including the painted-ground shader's fog.
+- Zone mode: live capture with hysteresis, 100-point knockout, ground border band + light curtain + minimap/stage-preview outline, bot zone duty, and a HUD with control points, zone share and holder.
+- Survival mode: lives-left scoring (no bonus for standing fighters), eliminated fighters stay down, a wiped-out team ends the match, lives HUD/hearts/pips, a spectator camera for an eliminated player, and a lives column on the scoreboard.
+- Mode-aware end banners, end splash and results (headline score, knockout/wipeout note), coins shown on results and the player card, mode shown on Play, How-to rows for each mode and events.
+- Removed 22 `Object3D.add` console errors per load from empty tentacle pivots.
 - Optimized the external Downloads model library: 47 GLBs reduced from 2.14 GB to 88.15 MB using the confirmed Balanced profile; saved copies and reports in `~/Downloads/3D Model/Game Ready`, preserving all originals.
 - Created the reusable `add-glb-to-game` skill, with Three.js integration notes covering model selection, optimization, rigs, loading, packaging, validation, and authorized source cleanup. Linked its project copy from the README.
 - Removed the unused `cute-character.glb` original, freeing 61,048,116 bytes while retaining all eleven active GLBs and manifest provenance. Character regeneration now requires an external source path.
@@ -41,7 +53,7 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 - Added project context and executable end-match regression checks.
 
 ## In Progress
-- No partially implemented environment features in this session.
+- No partially implemented features in this integration; deployment and physical-device playtests remain follow-up work.
 
 ## Remaining / TODO
 - The confirmed new default is integrated. Detailed animation and physical-device playtests remain; the unused earlier `character.glb` is not needed for this integration.
@@ -52,13 +64,13 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 
 ## Known Issues
 - The five active source character files have no original skeletons or animation clips. Lightweight generated rigs preserve the new boy’s carry pose, the earlier boy’s hand-on-doppa pose, and restrained arm movement for dresses whose sculpted sleeves touch the garment. Facial expressions remain baked; detailed animation and physical-device checks remain follow-up work.
-- The previous session's native build limitation is resolved locally after installing the project lockfile dependencies. Production builds now pass. Vite still reports the large engine chunk warning (about 733 kB including shared Three.js code, with a separate 45 kB GLTFLoader chunk).
-- Existing main-branch world-event timers are reset in the periodic score-recount block, apparently preventing the 42-second event trigger; this pre-existing issue is outside the conflict-resolution scope.
+- The previous session's native build limitation is resolved locally after installing the project lockfile dependencies. Production builds now pass. Vite still reports the large engine chunk warning (about 752 kB including shared Three.js code, with a separate 45 kB GLTFLoader chunk).
 - Automated tests isolate actual gameplay functions and navigation modules; they do not replace full competitive playtests. Browser checks cover all four environments, decoded models, shaders, sampled live gameplay and menu-based stage switching. Urumqi uses closed building envelopes, with separate central-tower volumes; facade recesses and interiors remain inaccessible.
 - Turf retains the original shared XZ ownership: roof and street at the same position share ink/scoring. Building interiors and precise collision against ornamental recesses are intentionally not implemented.
 - The requested reference image directory was absent; the user explicitly approved proceeding from the written direction.
 
 ## Technical Decisions
+- Port selected Inkwave features at revision `2a32efea9ef253478dfeb7c4dcd2c49162264d5b` into isolated TypeScript weapon/rendering modules. Preserve the current engine, data levels, rigs and XZ scoring; retain the MIT notice in production. Full upstream maps, per-face atlas, gamepad, Super Jump and postprocessing are outside this balanced integration.
 - Use the actual supplied Uyghur character models. Use the newly confirmed black-doppa `cute-character.glb` as default and retain the corrected blue-doppa boy for `dutar`; keep character IDs/perks compatible, share prepared meshes/textures and create independent actor skeletons. Cache character assets across stages and dispose them on engine teardown.
 - Preserve the engine/UI bridge, 6v6 roster, character/weapon/mode logic and data-defined maps; isolate the city renderer and navigation in `src/game/environment/`.
 - Prefer the existing game’s procedural architecture. The user explicitly requested models for Turpan’s historic minaret and then all five models in the Urumqi folder. Ship optimized derivatives only; Kashgar and Taklimakan remain procedural.
@@ -68,12 +80,12 @@ The reusable `add-glb-to-game` skill is documented in `skills/` and installed in
 - Merge main into the PR branch to preserve both histories and both sets of features.
 - Keep the PR's new character rig and adapt main's weapon-weight motion, running lean, and airborne poses to it.
 - Preserve main's mode-specific winner rules and resolve the winner before celebration state changes.
-- Keep main's v2.0.0 release label and synchronize package metadata.
+- v2.1.0 adds the balanced Inkwave feature integration; retain compatible character, stage and progression IDs.
 
 ## Next Recommended Tasks
 1. Playtest roof/street combat and route balance on desktop and a physical phone.
 2. Confirm the deployment preview and tune quality/performance from device measurements.
-3. Investigate the pre-existing world-event timer reset separately; consider character draw-call batching if mobile profiling warrants it.
+3. Tune the three new weapons, Zone capture thresholds and Survival lives from real playtests.
 
 ## Session History
 
@@ -467,3 +479,82 @@ Create lightweight copies of every GLB in `~/Downloads/3D Model` for games and o
 
 **Next**
 - Use files from `Game Ready` for future integrations; fit their collision, scale, and animation to the destination game as needed.
+
+### 2026-09-26 — Splatoon-style lobby
+
+**Goal**
+Make the menu cards look like a Splatoon lobby (user-supplied Splatoon 3 references), keeping Uyghur text, ALKATIP and RTL.
+
+**Completed**
+- Added `LobbySign` and `LobbyTag`, replaced the menu panel and player card, and added lime/ink/slate tokens and `.lobby-*`, `.sign-*`, `.status-*` styles, with reduced-motion support.
+- The Play sign shows stage, mode and team size; Stage and Loadout signs show the current choice. The status card's tags open How to play and Stage select. The menu version badge moved into the card.
+- `tsc -b`, `npm run build` and `npm test` (68) pass; desktop 1000×600 and phone 390×844 screenshots reviewed.
+
+**Files Changed**
+- `src/components/InkWaveApp.tsx`, `src/styles.css`, `README.md`, `PROGRESS.md`
+
+**Important Notes**
+- Inspired by the reference look only: every shape is original CSS/SVG and no Nintendo assets or logos are used.
+- The sandbox blocks the ALKATIP font host, so screenshots used the fallback font; outlined titles use `paint-order: stroke fill` so joined Uyghur letters keep clean strokes.
+
+**Next**
+- Review the lobby with the real ALKATIP font on a phone.
+
+### 2026-09-26 — Game-mode and HUD review
+
+**Goal**
+Check the v2.0.0 core/UI update and make its new features work as described.
+
+**Completed**
+- Found arena events could never trigger (their reset sat inside the score tick) and fixed it; sandstorm fog now reaches the ground shader and eases in/out.
+- Made Zone a real mode: continuous capture/control scoring with knockout, in-world/minimap/preview zone marking, bot zone duty, and HUD/result support.
+- Made Survival a real mode: correct lives scoring, permanent elimination, wipeout early end, spectating, lives HUD and scoreboard column.
+- Mode-aware banners, results and menu text; coins visible; How-to covers every mode; version badge moved into the HUD centre stack so it never overlaps chips.
+- Fixed pre-existing empty `Object3D.add` errors (22 per load).
+- `tsc -b`, `npm run build` and `npm test` (68 tests, including 6 new zone-rule tests and extended end-match cases) pass.
+- Headless SwiftShader playtests: zone capture/flip/knockout and results (Urumqi), survival respawn/elimination/spectate/wipeout and results (Kashgar), natural event trigger and sandstorm (Taklamakan), menu and stage screens.
+
+**Files Changed**
+- `src/game/engine.ts`, `src/game/types.ts`, `src/game/levels.ts`
+- `src/components/InkWaveApp.tsx`, `src/styles.css`
+- `tests/end-match.test.mjs`, `tests/zone-mode.test.mjs`
+- `README.md`, `PROJECT.md`, `PROGRESS.md`
+
+**Important Notes**
+- Survival scoring changed from `lives + alive` to `lives`; the old formula gave standing fighters an extra life. End-match tests were updated to the corrected rule.
+- `HudSnap` gained `mode`, `zone`, `survival` and `event`; `MatchResult` gained `mode`, `zone` and `lives`; `BoardRow` gained `lives`.
+
+**Next**
+- Playtest Zone thresholds (50% capture / 12-point lead / 36% hold) and Survival's 3 lives with real players.
+
+### 2026-09-26 — Balanced Inkwave integration (v2.1.0)
+
+**Goal**
+Bring improvements from `jaydendavisnc/inkwave` into the user's game while preserving their characters and architecture. The user selected a balanced upgrade of ink visuals, weapons and gameplay polish.
+
+**Completed**
+- Reviewed both repositories and pinned the MIT source revision. Adapted Dualies, Slosher and Splatling with their distinct firing/charge/windup patterns, ink budgets and local bot balance.
+- Added two collision-respecting paid dodge rolls with stable travel distance, a recovery firing boost, 3D weapon previews, recoil/spinning barrel animation, Uyghur help and charge/roll HUD.
+- Added a higher-resolution paint texture, six-second wetness, gel/edge shading, twelve impact ripples and four prioritized swim wakes. Low quality skips detailed ripple/wake shading.
+- Clipped wall ink to its hit box after a browser check revealed large splats overhanging short cover. Verified the correction visually with live bucket combat.
+- Enabled swim leaps, improved shoulder camera/crosshair aiming and swept projectile collision, and kept key taps queued until a simulation step consumes them.
+- Preserved concurrent main updates and recovered their omitted session records without deleting existing history. Updated README/project decisions and shipped upstream attribution.
+- Passed 83 tests, strict TypeScript/Vite build, whitespace checks and byte comparisons for all eleven source/production GLBs. No dependencies or runtime models changed.
+- Browser checks: Dualies painted 77 points and consumed both rolls; Slosher painted 45 points in Kashgar; Splatling reached full charge and streamed/painted in Oasis; low-quality Turpan swim leap reached about 1.97 m above ground. Reviewed seven-weapon loadout and live Splatling HUD/touch controls at 390×844, plus desktop visuals. No Three.js shader errors were logged; unrelated browser-extension connection errors were present.
+
+**Files Changed**
+- `src/game/weapons/arsenal.ts`, `src/game/weapons/weaponModels.ts`
+- `src/game/rendering/liquidInk.ts`, `src/game/engine.ts`, `src/game/types.ts`
+- `src/components/InkWaveApp.tsx`, `package.json`, `package-lock.json` (version metadata only)
+- `tests/arsenal.test.mjs`, `tests/projectile-collision.test.mjs`
+- `public/licenses/inkwave-MIT.txt`, `docs/INKWAVE_INTEGRATION.md`
+- `README.md`, `PROJECT.md`, `PROGRESS.md`
+
+**Important Notes**
+- Selective feature adaptation, not replacement with upstream's unrelated application or Git history. The user chose this balanced scope.
+- Existing supplied meshes have sculpted poses; weapons use the current mounts without re-authoring the character rigs. Existing shared XZ turf ownership remains.
+- The temporary browser integration page is removed after verification. The game remains available through the normal local Vite server.
+- The existing bundle-size warning remains; physical phone performance and weapon balance still need playtesting. No deployment or push was performed.
+
+**Next**
+- Playtest all seven weapons on a physical phone and desktop; review the local v2.1 build before publishing a deployment.

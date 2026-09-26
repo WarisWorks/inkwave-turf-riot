@@ -24,14 +24,14 @@ VITE_MATCH_LEN=75 npm run dev
 - **WASD** — move (A/D strafe)
 - **Mouse** — aim (click-drag or pointer lock)
 - **Left click** — shoot
-- **Space** — jump
+- **Space** — jump; leap out of ink while swimming; dodge with Dualies while moving and firing
 - **Shift** — swim in your own ink (refills tank)
 - **Right click** / **C** — throw sub weapon
 - **F** — special (when meter is full)
 - **Esc** — pause
 - **Tab** (hold) — scoreboard
 
-Loadout includes Spritzer, Swell Roller, Flint Charger, and Popper Blaster, plus Pop Bomb or Ink Beacon, and Ink Burst, Ink Tempest, or Reef Rush.
+Loadout includes Spritzer, Swell Roller, Flint Charger, Popper Blaster, Twinfin Dualies, Tidebucket Slosher, and Gyre Splatling, plus Pop Bomb or Ink Beacon, and Ink Burst, Ink Tempest, or Reef Rush.
 
 ## Game modes
 
@@ -46,6 +46,18 @@ Pick a mode under **جەڭ ئۇسۇلى** on the stage screen; the menu's Play b
 Results name the mode, its headline score (turf %, control points or lives left), a knockout or wipeout note, and the coins earned. Coins are also shown on the player card.
 
 **Arena events**: every 42 s of play a festival wave charges everyone's special faster for 14 s. In Taklamakan a sandstorm can roll in instead for 18 s: fog and sky blend to sand (including the painted ground), and bots see only about two thirds as far. A chip under the clock names the event and counts it down.
+
+## Inkwave upgrade (v2.1)
+
+Selected mechanics and liquid-ink ideas from [Jayden Davis's INKWAVE](https://github.com/jaydendavisnc/inkwave) are integrated into this game's existing React/TypeScript engine. Your supplied characters, four arenas, Uyghur UI, saves, 6v6 teams and three modes are retained.
+
+- **Twinfin Dualies · قوش تاپانچا**: alternating pistols. Move + fire + Space for a dodge; chain two rolls, then release fire to recover. Each roll costs seven ink. Landing briefly steadies and speeds up fire.
+- **Tidebucket Slosher · دولقۇن چېلىكى**: a short windup followed by a five-drop arc over cover. Each wave can damage a given opponent once.
+- **Gyre Splatling · قۇيۇن ئاتقۇچ**: hold fire to spin up, release for a sustained stream. More charge means a longer burst; swimming cancels it. The reticle meter fills and drains with the weapon.
+- **Liquid ink**: denser scalloped splats, wet highlights that settle over six seconds, rounded ink edges, impact ripples and V-shaped swim wakes. Low quality keeps the ink colors and drying sheen while skipping ripple/wake detail.
+- **Handling**: swim jumps, a clearer shoulder camera with gentle speed-based FOV, crosshair-aware aiming, and swept projectile checks against actors and cover. Queued keyboard taps wait for the next simulation step even on high-refresh displays.
+
+See [integration notes](docs/INKWAVE_INTEGRATION.md) for source attribution, architecture and tuning. The upstream MIT notice ships in [the game assets](public/licenses/inkwave-MIT.txt) and is linked from Credits.
 
 ## Movement, specials and animation (v1.4)
 
