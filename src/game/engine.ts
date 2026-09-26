@@ -1007,14 +1007,21 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     });
   }
 
+  // 6v6 roster: the human player + five Orange teammates versus six Violet opponents.
+  // Keep the loadout mix varied so larger matches feel busy without turning into a wall of one weapon type.
   const BOTS: { name: string; team: Team; weapon: WeaponId; char: CharacterId }[] = [
     { name: "ئايگۈل", team: 1, weapon: "spritzer", char: "scarf" },
     { name: "باتۇر", team: 1, weapon: "roller", char: "telpek" },
     { name: "دىلشات", team: 1, weapon: "blaster", char: "dutar" },
+    { name: "گۈلنار", team: 1, weapon: "charger", char: "braids" },
+    { name: "تۇرسۇن", team: 1, weapon: "spritzer", char: "doppa" },
+
     { name: "نىگار", team: 2, weapon: "spritzer", char: "braids" },
     { name: "ئەركىن", team: 2, weapon: "charger", char: "doppa" },
     { name: "مەرۋە", team: 2, weapon: "blaster", char: "scarf" },
     { name: "ئالىم", team: 2, weapon: "roller", char: "wave" },
+    { name: "رەنا", team: 2, weapon: "spritzer", char: "dutar" },
+    { name: "سامەت", team: 2, weapon: "blaster", char: "telpek" },
   ];
 
   const actors: Actor[] = [];
@@ -1075,7 +1082,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     writeName(hero, bridge.config.current.name.trim().slice(0, 16) || "ۋارىس", 1);
   }, () => {});
 
-  const MAXP = 72;
+  const MAXP = 120;
   const shotGeo = new THREE.SphereGeometry(0.16, 8, 6);
   const shotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const shotMesh = new THREE.InstancedMesh(shotGeo, shotMat, MAXP);
@@ -1109,7 +1116,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     });
   }
 
-  const MAXD = 180;
+  const MAXD = 240;
   const decalGeo = new THREE.PlaneGeometry(1, 1);
   const decalMap = new THREE.CanvasTexture(softWhite);
   decalMap.colorSpace = THREE.SRGBColorSpace;
@@ -1148,7 +1155,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (decals.instanceColor) decals.instanceColor.needsUpdate = true;
   }
 
-  const PMAX = 420;
+  const PMAX = 640;
   const pPos = new Float32Array(PMAX * 3);
   const pCol = new Float32Array(PMAX * 3);
   const pVel = new Float32Array(PMAX * 3);
@@ -2128,9 +2135,22 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
 
   function respawn(a: Actor) {
     const spots = a.team === 1 ? level.spawnO : level.spawnV;
-    const s = a.isPlayer ? spots[1] : spots[Math.floor(rand() * spots.length)];
-    a.x = s[0];
-    a.z = s[1];
+    const sameTeam = actors.filter((other) => other !== a && other.team === a.team && other.alive);
+    let s = spots[Math.floor(rand() * spots.length)];
+    let bestScore = -Infinity;
+    for (const candidate of spots) {
+      let nearest = Infinity;
+      for (const other of sameTeam) {
+        nearest = Math.min(nearest, Math.hypot(other.x - candidate[0], other.z - candidate[1]));
+      }
+      const score = nearest + rand() * 0.35;
+      if (score > bestScore) {
+        bestScore = score;
+        s = candidate;
+      }
+    }
+    a.x = s[0] + (rand() - 0.5) * 1.1;
+    a.z = s[1] + (rand() - 0.5) * 0.8;
     a.y = surfaceTop(a.x, a.z);
     a.vy = 0;
     a.splat = 0;
@@ -2230,10 +2250,15 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.swimming = false;
       a.vy = 0;
       const spots = a.team === 1 ? level.spawnO : level.spawnV;
-      // The player always takes spot 1; shift bots by one so nobody spawns on top of them.
-      const s = a.isPlayer ? spots[1] : spots[(idx + 1) % spots.length];
-      a.x = s[0];
-      a.z = s[1];
+      const teamSlot = actors.slice(0, idx).filter((other) => other.team === a.team).length;
+      const base = spots[teamSlot % spots.length];
+      // Large 6v6 matches can outnumber a level's authored spawn markers.
+      // Fan repeated slots sideways and slightly forward so teammates do not stack inside each other.
+      const lap = Math.floor(teamSlot / spots.length);
+      const dir = a.team === 1 ? 1 : -1;
+      const spread = lap === 0 ? 0 : (teamSlot % 2 === 0 ? -1 : 1) * (1.35 + lap * 0.65);
+      a.x = clamp(base[0] + spread, -28.6, 28.6);
+      a.z = clamp(base[1] + dir * lap * 1.15, -36.6, 36.6);
       a.y = surfaceTop(a.x, a.z);
       a.yaw = a.team === 1 ? Math.PI : 0;
       a.pitch = 0.16;
