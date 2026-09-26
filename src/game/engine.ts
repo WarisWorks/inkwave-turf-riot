@@ -73,6 +73,10 @@ type Actor = {
   fireCd: number;
   subCd: number;
   charge: number;
+  /** Short procedural kick used by firing animations. */
+  recoil: number;
+  /** Landing squash/impact impulse, decays every frame. */
+  landKick: number;
   think: number;
   goalX: number;
   goalZ: number;
@@ -1050,6 +1054,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       fireCd: 0,
       subCd: 0,
       charge: 0,
+      recoil: 0,
+      landKick: 0,
       think: 0,
       goalX: 0,
       goalZ: team === 1 ? 10 : -10,
@@ -1424,6 +1430,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
     if (actor.ink < cost || actor.fireCd > 0) return;
     actor.ink -= cost;
     actor.fireCd = fromPlayer ? P.cd : 0.2 * tuneFor(actor).cd;
+    actor.recoil = Math.max(actor.recoil, fromPlayer ? 1 : 0.72);
     const f = yawForward(actor.yaw);
     const speed = fromPlayer ? P.speed : 34;
     spawnProj({
@@ -1457,6 +1464,7 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
   function shootBlaster(actor: Actor, dir: THREE.Vector3, fromPlayer: boolean) {
     if (actor.ink < 14 || actor.fireCd > 0) return;
     actor.ink -= 14;
+    actor.recoil = Math.max(actor.recoil, fromPlayer ? 1.45 : 1.1);
     const P = POWER.blaster;
     actor.fireCd = fromPlayer ? P.cd : 1.05 * tuneFor(actor).cd;
     const f = yawForward(actor.yaw);
@@ -2245,6 +2253,8 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       a.splat = 0;
       a.rush = 0;
       a.charge = 0;
+      a.recoil = 0;
+      a.landKick = 0;
       a.fireCd = 0;
       a.subCd = 0;
       a.swimming = false;
@@ -2442,16 +2452,49 @@ export function mountInkWave(canvas: HTMLCanvasElement, mini: HTMLCanvasElement,
       if (!a.alive) continue;
       m.root.position.set(a.x, a.y, a.z);
       m.root.rotation.y = a.yaw + Math.PI;
-      const moving = Math.hypot(a.vx, a.vz) > 0.8 && a.grounded && !a.swimming;
-      a.phase += dt * (moving ? 11 : 2.2);
-      m.legs.children[0].rotation.x = Math.sin(a.phase) * (moving ? 0.75 : 0.06);
-      m.legs.children[1].rotation.x = Math.sin(a.phase + Math.PI) * (moving ? 0.75 : 0.06);
-      m.tentL.rotation.z = 0.35 + Math.sin(a.phase * 0.6) * 0.12;
-      m.tentR.rotation.z = -0.35 - Math.sin(a.phase * 0.6) * 0.12;
-      m.body.position.y = a.swimming ? -0.35 : Math.sin(a.phase) * (moving ? 0.04 : 0.01);
-      m.body.scale.set(a.swimming ? 1.15 : 1, a.swimming ? 0.42 : 1, a.swimming ? 1.35 : 1);
+      const planarSpeed = Math.hypot(a.vx, a.vz);
+      const moving = planarSpeed > 0.8 && a.grounded && !a.swimming;
+      const speed01 = clamp(planarSpeed / 7.2, 0, 1);
+      const airborne = !a.grounded && !a.swimming;
+      const firing = a.fireCd > 0 && !a.swimming;
+      a.phase += dt * (moving ? 9 + speed01 * 7 : a.swimming ? 7 : 2.2);
+      a.recoil = Math.max(0, a.recoil - dt * 7.5);
+      a.landKick = Math.max(0, a.landKick - dt * 5.5);
+
+      // Locomotion has weight: stride, torso lean, side sway, jump pose and breathing.
+      const stride = Math.sin(a.phase);
+      const bob = moving ? Math.abs(Math.sin(a.phase)) * 0.065 * speed01 : Math.sin(t * 2.2 + a.phase) * 0.012;
+      m.legs.children[0].rotation.x = airborne ? -0.38 : stride * (moving ? 0.82 : 0.06);
+      m.legs.children[1].rotation.x = airborne ? 0.48 : -stride * (moving ? 0.82 : 0.06);
+      m.tentL.rotation.z = 0.35 + Math.sin(a.phase * 0.6) * (moving ? 0.2 : 0.12);
+      m.tentR.rotation.z = -0.35 - Math.sin(a.phase * 0.6) * (moving ? 0.2 : 0.12);
+
+      const forwardLean = a.swimming ? -0.12 : airborne ? -0.18 : moving ? -0.14 * speed01 : 0;
+      const sideLean = moving ? Math.sin(a.phase * 0.5) * 0.045 * speed01 : 0;
+      const recoil = a.recoil;
+      m.body.rotation.x = forwardLean + recoil * 0.08;
+      m.body.rotation.z = sideLean;
+      m.body.position.y = a.swimming ? -0.35 + Math.sin(a.phase) * 0.05 : bob - a.landKick * 0.06;
+      m.body.scale.set(
+        a.swimming ? 1.15 : 1 + a.landKick * 0.035,
+        a.swimming ? 0.42 : 1 - a.landKick * 0.05,
+        a.swimming ? 1.35 : 1 + a.landKick * 0.025,
+      );
       m.legs.visible = !a.swimming;
       m.mount.visible = !a.swimming;
+
+      // Weapon action: running bob + breathing + visible kickback when a shot leaves the muzzle.
+      // Different weapon weights get different motion so the gun does not feel glued to the torso.
+      const weaponWeight = a.weapon === "blaster" ? 1.3 : a.weapon === "charger" ? 0.72 : a.weapon === "roller" ? 0.9 : 1;
+      const gunBob = moving ? Math.sin(a.phase * 2) * 0.045 * speed01 : Math.sin(t * 2.5 + a.phase) * 0.012;
+      m.mount.position.set(
+        0.22 + (moving ? Math.cos(a.phase) * 0.025 * speed01 : 0),
+        0.98 + gunBob,
+        0.18 + recoil * 0.12 * weaponWeight,
+      );
+      m.mount.rotation.x = -0.08 - recoil * 0.16 * weaponWeight + (airborne ? 0.12 : 0);
+      m.mount.rotation.z = moving ? -stride * 0.045 * speed01 : 0;
+      if (firing && a.weapon === "spritzer") m.mount.rotation.x += Math.sin(t * 70) * 0.018;
       const blink = a.invuln > 0 && Math.sin(t * 24) > 0;
       m.root.visible = !blink;
       const roll = m.weapons.roller.getObjectByName("roll");
