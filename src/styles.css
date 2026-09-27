@@ -521,6 +521,36 @@
     animation: count-pop 420ms var(--ink-spring) both;
   }
 
+  .brand-footer {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0.5rem 1rem max(1.25rem, env(safe-area-inset-bottom));
+  }
+  .brand-links {
+    display: flex;
+    gap: 0.375rem;
+    padding: 0.375rem;
+    border: 2px solid var(--color-ink);
+    border-radius: 999px;
+    background: var(--color-slate);
+    box-shadow: 3px 4px 0 var(--color-ink);
+  }
+  .brand-links a {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    color: var(--color-foam);
+  }
+  .brand-links a:hover,
+  .brand-links a:focus-visible {
+    background: var(--color-lime);
+    color: var(--color-ink);
+  }
+
   /* ── Lobby (main menu): hanging signs, slanted tags, status card ── */
   .lobby-backdrop {
     position: fixed;

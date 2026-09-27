@@ -2,7 +2,9 @@
 
 ## Source and scope
 
-Source: [jaydendavisnc/inkwave](https://github.com/jaydendavisnc/inkwave), revision `2a32efea9ef253478dfeb7c4dcd2c49162264d5b`, MIT © 2026 Jayden Davis. The complete notice is retained in `public/licenses/inkwave-MIT.txt`, packaged by Vite and linked in Credits.
+InkWave Turf Riot was created and developed from scratch by Idirak. This document covers selected features integrated later, not the origin of the game.
+
+Source of the imported features: [jaydendavisnc/inkwave](https://github.com/jaydendavisnc/inkwave), revision `2a32efea9ef253478dfeb7c4dcd2c49162264d5b`, MIT © 2026 Jayden Davis. The complete notice is retained in `public/licenses/inkwave-MIT.txt` and packaged by Vite. The in-game Credits focus on Idirak and do not display an upstream contribution section or GitHub link.
 
 This is a selective code/feature port into InkWave Turf Riot, not a Git-history merge between unrelated apps. The user chose a balanced upgrade: better ink visuals, more weapons and gameplay polish while preserving their characters and architecture.
 

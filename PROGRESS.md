@@ -1,6 +1,8 @@
 # Project Progress
 
 ## Current Status
+Idirak is the original creator and primary developer. The game began as Idirak’s own project; selected Inkwave features were integrated later. Credits show Idirak’s creator information, copyright and community icon links. The upstream disclosure and GitHub link have been removed from the game UI at the user’s request; source documentation and the packaged license notice remain.
+
 Version 2.1.0 integrates selected mechanics and liquid-ink visuals from Jayden Davis's Inkwave while preserving the existing React/TypeScript/Three.js architecture, supplied Uyghur characters, four arenas, saves, 6v6 teams and three game modes. The loadout now has seven weapons: Dualies with two dodge rolls, an arcing Slosher and a charged Splatling join the original four. Ink has wetness, edge relief, impact ripples and swim wakes; wall decals clip to their hit surfaces. Swim jumping, camera framing, aiming and fast-projectile collision are improved. The incoming lobby, Zone/Survival and event fixes are retained.
 
 All 83 tests and the production build pass. Live browser checks verified all three new weapon types, two-roll use, charge/release, painting, stage changes across all four arenas, a swim leap in low quality, and the responsive 390×844 loadout. Sampled desktop gameplay ran at 60 FPS; this is not a physical phone benchmark. All eleven runtime GLBs remain unchanged and match their packaged copies. The existing large engine bundle warning remains (about 752 kB).
@@ -8,6 +10,9 @@ All 83 tests and the production build pass. Live browser checks verified all thr
 The default remains the optimized black-doppa `cute.glb`. The reusable `add-glb-to-game` skill and previous Downloads model optimization work remain documented below.
 
 ## Completed
+- Removed the open-source contributions disclosure and upstream GitHub/license links from the Credits UI at the user’s request.
+- Corrected Credits and project provenance to identify Idirak as the original creator and main developer; moved the later Inkwave contribution details into a secondary disclosure.
+- Added the Idirak copyright mark in Credits and a reusable, icon-only Lucide footer in the lobby and Credits with all five requested community/support links.
 - Integrated the v2.1 Inkwave feature port: three new weapon state machines/models, bots, Uyghur loadout/help, charge/roll HUD, swim leaps, wet ink/wakes and clipped wall splats.
 - Added fifteen executable arsenal, save, wetness/wake, pooled projectile, wall-occlusion and per-volley regression checks; all 83 tests pass.
 - Retained upstream MIT attribution in the source, Credits and production assets; documented exact source revision and port boundaries in `docs/INKWAVE_INTEGRATION.md`.
@@ -558,3 +563,72 @@ Bring improvements from `jaydendavisnc/inkwave` into the user's game while prese
 
 **Next**
 - Playtest all seven weapons on a physical phone and desktop; review the local v2.1 build before publishing a deployment.
+
+### 2026-09-27 — Idirak copyright and icon footer
+
+**Goal**
+Restore Idirak branding and provide Instagram, X, YouTube, website and Ko-fi links using only Lucide icons in the footer.
+
+**Completed**
+- Confirmed no Idirak copyright or community footer was present. Added a non-link `© [current year] Idirak` line in Credits, retaining the upstream credit/license notice.
+- Added reusable `BrandFooter` to the lobby and Credits: Instagram `@uyghurai`, X `@uyghurai`, YouTube `@UyghurAI`, `https://idirak.com`, and `https://ko-fi.com/uyghurAI`.
+- Kept footer links visually icon-only, with accessible names, hover titles, visible keyboard focus, 44×44 px targets and safe external-tab attributes. Used Lucide Instagram, X, Youtube, Globe and Coffee icons.
+- Used normal layout flow so the footer sits beneath lobby content, scrolls into view on phones and never covers gameplay controls.
+- Passed strict TypeScript/Vite build and `git diff --check`. Browser-reviewed desktop and 390×844 layouts, all five rendered URLs, empty link text, keyboard focus and the copyright line. No additional gameplay tests were needed for this presentational change.
+
+**Files Changed**
+- `src/components/BrandFooter.tsx`
+- `src/components/InkWaveApp.tsx`
+- `src/styles.css`
+- `PROGRESS.md`
+
+**Important Notes**
+- Copyright text is outside the icon-only footer, in Credits. Existing upstream attribution is retained.
+- YouTube uses the handle URL corresponding to the supplied name, `https://www.youtube.com/@UyghurAI`; external channel identity could not be independently confirmed with the web reader.
+- No dependencies, gameplay logic or runtime assets changed. The existing large-engine-bundle warning remains.
+
+**Next**
+- Review the updated lobby/credits in the deployment preview; confirm the YouTube handle if it differs from the supplied name.
+
+### 2026-09-27 — Idirak as the original creator
+
+**Goal**
+Correct the Credits hierarchy after the user clarified that they built the game from scratch under Idirak and only later merged selected Jayden Davis features.
+
+**Completed**
+- Made Idirak the prominent creator/main-developer credit with Uyghur copy stating the game was created from scratch by Idirak.
+- Kept Idirak copyright and the existing icon footer; moved later MIT-licensed additions into a collapsed open-source contributions disclosure.
+- Corrected README provenance, PROJECT memory and the integration document so the feature source cannot be mistaken for the original game’s creator.
+- Passed strict TypeScript/Vite production build and whitespace checks; browser-reviewed the creator credit and contribution disclosure.
+
+**Files Changed**
+- `src/components/InkWaveApp.tsx`
+- `README.md`, `PROJECT.md`, `docs/INKWAVE_INTEGRATION.md`, `PROGRESS.md`
+
+**Important Notes**
+- Preserve Idirak’s primary authorship in future Credits edits. The imported code retains Jayden Davis’s MIT attribution in source, the packaged notice and the secondary disclosure.
+- This is a content/presentation correction; no gameplay code or dependencies changed. The existing engine chunk-size warning remains.
+
+**Next**
+- Review the revised Credits in the deployment preview.
+
+### 2026-09-27 — Remove the Credits contribution section
+
+**Goal**
+Remove the contribution disclosure shown in the user’s screenshot and keep the Credits screen focused on Idirak.
+
+**Completed**
+- Removed the entire disclosure, its descriptive text and both upstream links from the UI.
+- Preserved Idirak’s prominent creator credit, copyright, version and five icon-only community links.
+- Updated project documentation to match the UI; retained source attribution and the packaged MIT notice.
+- Passed strict TypeScript/Vite build and `git diff --check`; browser-verified that Credits contains Idirak’s information and the five footer links without the removed disclosure. The existing engine chunk-size warning remains.
+
+**Files Changed**
+- `src/components/InkWaveApp.tsx`
+- `README.md`, `PROJECT.md`, `docs/INKWAVE_INTEGRATION.md`, `PROGRESS.md`
+
+**Important Notes**
+- This removes the visible section only. No gameplay, dependencies or assets changed.
+
+**Next**
+- Review the updated Credits in the deployment preview.

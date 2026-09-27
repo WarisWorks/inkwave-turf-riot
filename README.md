@@ -57,7 +57,7 @@ Selected mechanics and liquid-ink ideas from [Jayden Davis's INKWAVE](https://gi
 - **Liquid ink**: denser scalloped splats, wet highlights that settle over six seconds, rounded ink edges, impact ripples and V-shaped swim wakes. Low quality keeps the ink colors and drying sheen while skipping ripple/wake detail.
 - **Handling**: swim jumps, a clearer shoulder camera with gentle speed-based FOV, crosshair-aware aiming, and swept projectile checks against actors and cover. Queued keyboard taps wait for the next simulation step even on high-refresh displays.
 
-See [integration notes](docs/INKWAVE_INTEGRATION.md) for source attribution, architecture and tuning. The upstream MIT notice ships in [the game assets](public/licenses/inkwave-MIT.txt) and is linked from Credits.
+See [integration notes](docs/INKWAVE_INTEGRATION.md) for source attribution, architecture and tuning. The upstream MIT notice ships in [the game assets](public/licenses/inkwave-MIT.txt).
 
 ## Movement, specials and animation (v1.4)
 
@@ -141,6 +141,6 @@ All in-game content is in Uyghur (سىياھ دولقۇنى — زېمىن جې�
 
 Use [add-glb-to-game](skills/add-glb-to-game/SKILL.md) for the reusable workflow to inspect, optimize, integrate, animate, verify, and clean up supplied 3D models. Its [Three.js notes](skills/add-glb-to-game/references/threejs.md) explain this project's integration points.
 
-## Source
+## Creator and contributions
 
-Exported from a Grok share of the playable InkWave Turf Riot v1.0.0 build.
+Created and developed from scratch by **Idirak**. Selected weapon mechanics and ink effects from Jayden Davis's Inkwave were integrated in a later update under the MIT license; see [integration notes](docs/INKWAVE_INTEGRATION.md). The in-game Credits show Idirak's creator information, copyright and icon-only community links.

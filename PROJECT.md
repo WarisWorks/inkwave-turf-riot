@@ -1,6 +1,8 @@
 # InkWave Turf Riot
 
 ## Purpose and users
+Created and developed from scratch by Idirak. Selected weapon mechanics and ink effects from Jayden Davis's Inkwave were integrated later. In-game Credits show Idirak's creator information, copyright and icon-only community links, with no upstream contribution section or GitHub link. Imported-code attribution remains in source documentation and the packaged license notice.
+
 A desktop-first, Uyghur-language 6v6 ink shooter for players who want short, browser-based matches against bots. The game combines territory painting, distinct character perks, and Uyghur-inspired arenas.
 
 ## Core features

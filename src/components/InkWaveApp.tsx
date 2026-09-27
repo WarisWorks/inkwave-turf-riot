@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+import { BrandFooter } from "./BrandFooter";
 import {
   Bomb,
   Check,
@@ -426,9 +427,9 @@ function Menu({
     ["رېكورت", save.best],
   ];
   return (
-    <div className="lobby absolute inset-0 z-30 overflow-y-auto">
+    <div className="lobby absolute inset-0 z-30 flex flex-col overflow-y-auto">
       <span className="lobby-backdrop" aria-hidden />
-      <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-8 p-4 pt-8 pb-12 md:flex-row md:items-center md:gap-12 md:px-8 md:py-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 p-4 pt-8 pb-8 md:flex-row md:items-center md:gap-12 md:px-8 md:py-6">
         <section className="flex w-full flex-col gap-6 md:max-w-lg" aria-labelledby="lobby-title">
           <header className="lobby-logo">
             <span className="lobby-logo-kicker">رەڭلىك زېمىن تالىشىش جېڭى</span>
@@ -546,6 +547,7 @@ function Menu({
           </p>
         </aside>
       </div>
+      <BrandFooter />
     </div>
   );
 }
@@ -875,17 +877,19 @@ function Credits({ onBack }: { onBack: () => void }) {
         <BackButton onBack={onBack} />
         <h2 className="mt-2 font-display text-4xl">ئويۇن ھەققىدە</h2>
         <section className="panel p-5 leading-ug">
-          <p className="font-display text-2xl text-orange">سىياھ دولقۇنى: زېمىن جېڭى</p>
+          <p className="font-display text-2xl">سىياھ دولقۇنى: زېمىن جېڭى</p>
+          <div className="mt-5 border-s-4 border-orange ps-4">
+            <p className="text-sm text-muted">ئىجادكار ۋە ئاساسلىق ئاچقۇچى</p>
+            <p className="font-display text-3xl text-orange">ئىدراك · <bdi>Idirak</bdi></p>
+          </div>
+          <p className="mt-4">سىياھ دولقۇنى ئىدراك تەرىپىدىن نۆلدىن باشلاپ لايىھەلەنگەن ۋە ئىشلەپچىقىرىلغان مۇستەقىل ئويۇن.</p>
           <p className="mt-3">6 گە 6 زېمىن تالىشىش ئويۇنى — ئۇيغۇر پېرسوناژلىرى، تۆت مەيدان ۋە يەتتە قورال.</p>
-          <p className="mt-3 text-sm leading-ug text-muted">
-            يېڭى قورال ۋە سىياھ ئۈنۈملىرى Jayden Davis نىڭ INKWAVE تۈرىدىن ماسلاشتۇرۇلدى. پېرسوناژ مودېللىرى ۋە ئۇيغۇر مەيدانلىرى ساقلاپ قېلىندى.
-          </p>
-          <p className="mt-3 flex flex-wrap gap-4 text-sm text-sun" dir="ltr">
-            <a href="https://github.com/jaydendavisnc/inkwave" target="_blank" rel="noreferrer" className="underline">INKWAVE · Jayden Davis</a>
-            <a href="/licenses/inkwave-MIT.txt" target="_blank" rel="noreferrer" className="underline">MIT License</a>
-          </p>
-          <p className="mt-4 font-display text-sm text-sun">{VERSION}</p>
+          <div className="mt-5 flex items-center justify-between gap-3 text-sm" dir="ltr">
+            <p>© {new Date().getFullYear()} Idirak</p>
+            <p className="font-display text-sun">{VERSION}</p>
+          </div>
         </section>
+        <BrandFooter />
       </div>
     </div>
   );
